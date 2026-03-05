@@ -2,18 +2,19 @@
 <html lang="sl">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TripM – Roadbook Trip Alerts</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TripM – Roadbook Tripmaster</title>
 
 <style>
 body{
   margin:0;
   background:#0b0f14;
   color:#eaf2ff;
-  font-family:system-ui,Arial;
+  font-family:system-ui,Segoe UI,Roboto,Arial;
   -webkit-user-select:none;
   user-select:none;
 }
+
 .card{
   background:#121a23;
   border:1px solid #203043;
@@ -21,22 +22,26 @@ body{
   padding:12px;
   margin:10px;
 }
+
 .big{
-  font-size:2.35rem;
-  font-weight:700;
-  font-family:monospace;
+  font-size:2.45rem;
+  font-weight:800;
+  font-family:ui-monospace,monospace;
 }
+
 .label{
   color:#a3b8d4;
   font-size:.9rem;
 }
+
 .row{
   display:flex;
   gap:6px;
   flex-wrap:wrap;
   align-items:center;
 }
-button, input, select{
+
+button,input,select{
   background:#0f1620;
   color:#eaf2ff;
   border:1px solid #2c3c50;
@@ -44,33 +49,40 @@ button, input, select{
   border-radius:10px;
   font-size:1rem;
 }
+
 button{ cursor:pointer; }
+
 .primary{
   background:#143247;
   border-color:#255a79;
 }
+
 .ok{
   background:#0f2b22;
   border-color:#1c5b45;
 }
+
 .danger{
   background:#3a1618;
   border-color:#6b2226;
 }
+
 .list{
-  max-height:220px;
+  max-height:260px;
   overflow:auto;
   border:1px dashed #203043;
   padding:8px;
   border-radius:10px;
+  font-size:.95rem;
 }
+
 .alert{
   position:fixed;
-  bottom:12px;
+  bottom:14px;
   left:50%;
   transform:translateX(-50%);
   width:90%;
-  max-width:350px;
+  max-width:340px;
   background:#0c1a25;
   border:2px solid #ffd166;
   border-radius:14px;
@@ -88,304 +100,744 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big">0.000</div>
+
   <div class="row">
-    <button id="tm">−0.010</button>
-    <button id="tp">+0.010</button>
-    <input id="setT" type="number" step="0.001" placeholder="12.345">
-    <button id="setTb" class="ok">Nastavi</button>
-    <button id="rT" class="danger">Reset TOTAL</button>
+    <button id="btnTotalMinus">−0.010</button>
+    <button id="btnTotalPlus">+0.010</button>
+
+    <input id="setTotalInput" type="number" step="0.001" placeholder="npr. 12.345" style="width:120px">
+    <button id="btnSetTotal" class="ok">Nastavi</button>
+
+    <button id="btnTotalReset" class="danger">Reset TOTAL</button>
   </div>
-  <div class="label" id="gpss">GPS inicializacija…</div>
-  <div class="label" id="acca">Natančnost: —</div>
+
+  <div class="label" id="gpsStatus">GPS inicializacija…</div>
+  <div class="label" id="accStatus">Natančnost: —</div>
 </div>
 
 <!-- PARTIAL -->
 <div class="card">
   <div class="label">PARTIAL (km)</div>
   <div id="partial" class="big">0.000</div>
+
   <div class="row">
-    <button id="pm">−0.010</button>
-    <button id="pp">+0.010</button>
-    <button id="rP" class="ok">Reset PARTIAL</button>
+    <button id="btnPartialMinus">−0.010</button>
+    <button id="btnPartialPlus">+0.010</button>
+    <button id="btnPartialReset" class="ok">Reset PARTIAL</button>
   </div>
+
   <div class="row">
-    <button id="startBtn" class="primary">▶ START</button>
-    <button id="stopBtn">⏸ STOP</button>
+    <button id="btnStart" class="primary">▶ START</button>
+    <button id="btnStop">⏸ STOP</button>
   </div>
 </div>
 
 <!-- NEXT POINT -->
 <div class="card">
   <div class="label">Naslednja točka</div>
-  <div id="nextD" class="big" style="font-size:1.8rem">— m</div>
-  <div id="nextL" class="label">Ni naloženih točk.</div>
+  <div id="nextDist" class="big" style="font-size:1.8rem">— m</div>
+  <div id="nextLabel" class="label">Ni naloženih točk.</div>
 </div>
 
 <!-- CSV LOADING -->
 <div class="card">
-  <div class="label">CSV datoteke (root)</div>
+  <div class="label">CSV datoteke (root – auto discovery)</div>
+
   <div class="row">
-    <select id="csvSel"></select>
-    <button id="loadSel" class="primary">Naloži</button>
+    <select id="csvSelect" style="min-width:200px"></select>
+    <button id="btnLoadSelected" class="primary">Naloži</button>
   </div>
-  <div class="row">
-    <input id="urlIn" type="url" placeholder="https://…/waypoints.csv" style="flex:1">
-    <button id="loadUrl">URL load</button>
+
+  <div class="row" style="margin-top:6px">
+    <input id="csvUrlInput" type="url" placeholder="https://…/file.csv" style="flex:1">
+    <button id="btnLoadUrl">URL load</button>
+  </div>
+
+  <div class="row" style="margin-top:6px">
+    <input id="csvFileInput" type="file" accept=".csv">
   </div>
 </div>
 
 <!-- ALERT SETTINGS -->
 <div class="card">
-  <div class="label">Opozorila</div>
+  <div class="label">Nastavitve opozoril</div>
+
   <div class="row">
-    <label>Lead (m):</label><input id="lead" type="number" value="50" min="0" step="5" style="width:80px">
-    <label>MaxAcc (m):</label><input id="maxAcc" type="number" value="30" min="5" style="width:80px">
-    <label>MinStep (m):</label><input id="minStep" type="number" value="2" min="0" style="width:80px">
+    <label>Lead (m):</label>
+    <input id="leadInput" type="number" value="50" min="0" step="5" style="width:80px">
+
+    <label>MaxAcc (m):</label>
+    <input id="maxAccInput" type="number" value="30" min="5" style="width:80px">
+
+    <label>MinStep (m):</label>
+    <input id="minStepInput" type="number" value="2" min="0" style="width:80px">
+
+    <label>Auto-hide (s):</label>
+    <input id="autoHideInput" type="number" value="8" min="1" max="20" style="width:70px">
   </div>
 </div>
 
 <!-- WAYPOINT LIST -->
 <div class="card">
   <div class="label">Točke</div>
+
   <div id="wpList" class="list"></div>
-  <div class="row">
-    <input id="qTxt" type="text" placeholder="Opis" style="flex:1">
-    <button id="addHere" class="primary">Dodaj @TOTAL</button>
-    <button id="clr" class="danger">Počisti</button>
-    <button id="exp" class="ok">Izvozi CSV</button>
+
+  <div class="row" style="margin-top:6px">
+    <input id="quickWpText" type="text" placeholder="Opis točke" style="flex:1">
+    <button id="btnAddWpHere" class="primary">Dodaj @TOTAL</button>
+    <button id="btnClearWps" class="danger">Počisti</button>
+    <button id="btnExportCsv" class="ok">Izvozi CSV</button>
   </div>
 </div>
 
 <!-- ALERT POPUP -->
-<div id="alert" class="alert">
-  <div id="amsg">Opozorilo</div>
+<div id="alertBox" class="alert">
+  <div id="alertMsg">Opozorilo</div>
 </div>
-
-
 <script>
-// ---------------------------
-// GLOBALS
-// ---------------------------
-let watchId=null,last=null,total=0,partial=0,measure=false;
-let leadM=50, maxA=30, minS=2;
-let wps=[], autoHide=8000;
-let USER="avelus", REPO="TripM";
+// =========================
+//  GLOBAL STATE
+// =========================
+let watchId = null;
+let gpsReady = false;
+let measure = false;
 
-// SHORTHAND
+let lastPos = null;
+let total_m = 0;
+let partial_m = 0;
+
+let lead_m = 50;
+let maxAcc = 30;
+let minStep = 2;
+let autoHide = 8000;  // 8s
+
+let waypoints = [];   // {id, total_km, text, alerted, passed}
+let currentCsvUrl = "";
+let basis = "total";  // lahko total ali partial
+
+const USER = "avelus";
+const REPO = "TripM";
+
+const fmtKm = m => (m/1000).toFixed(3);
 const $ = id => document.getElementById(id);
 
-// ---------------------------
-// FORMATTING & MATH
-// ---------------------------
-function fmt(x){ return (x/1000).toFixed(3); }
 
-function hav(a,b){
-  const R=6371000, toRad=d=>d*Math.PI/180;
-  let dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
-  let h=Math.sin(dLat/2)**2 +
-         Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(h));
-}
+// =========================
+//  ALERT SYSTEM (bottom popup)
+// =========================
+let alertTimeout = null;
 
-// ---------------------------
-// UPDATE UI
-// ---------------------------
-function update(){
-  $('total').textContent = fmt(total);
-  $('partial').textContent = fmt(partial);
-  nextWp();
-}
-
-function nextWp(){
-  if(!wps.length){
-    $('nextD').textContent='— m';
-    $('nextL').textContent='Ni točk';
-    return;
-  }
-
-  let bestDist=Infinity, label='';
-  for(let w of wps){
-    let d = w.km*1000 - total;
-    if(d>0 && d<bestDist){
-      bestDist=d;
-      label = `#${w.id} @ ${w.km.toFixed(3)} km — ${w.txt}`;
-    }
-  }
-
-  if(bestDist===Infinity){
-    $('nextD').textContent='— m';
-    $('nextL').textContent='Ni več točk';
-    return;
-  }
-
-  $('nextD').textContent = Math.round(bestDist)+" m";
-  $('nextL').textContent = label;
-}
-
-// ---------------------------
-// ALERT BOX
-// ---------------------------
 function showAlert(msg){
-  $('amsg').textContent = msg;
-  let a = $('alert');
-  a.style.display='block';
-  setTimeout(()=>a.style.display='none', autoHide);
+  const box = $("alertBox");
+  $("alertMsg").textContent = msg;
+
+  box.style.display = "block";
+
+  clearTimeout(alertTimeout);
+  alertTimeout = setTimeout(()=>{
+    box.style.display = "none";
+  }, autoHide);
 }
 
-// ---------------------------
-// CSV LOADING
-// ---------------------------
-async function loadCsv(url){
-  let txt = await fetch(url).then(r=>r.text());
-  localStorage.csv_url = url;
-  localStorage.lastCsv = txt;
 
-  let rows = txt.split(/\r?\n/).filter(l=>l.trim());
-  let head = rows[0].toLowerCase();
-  let delim = head.includes(';') ? ';' : ',';
-  let cols = head.split(delim);
-
-  let iId  = cols.indexOf('id');
-  let iKm  = cols.indexOf('distance_km');
-  let iTxt = cols.indexOf('text');
-
-  wps = [];
-
-  for(let i=1;i<rows.length;i++){
-    let a = rows[i].split(delim);
-    if(!a.length) continue;
-
-    let id = iId>=0 ? a[iId] : i;
-    let km = iKm>=0 ? parseFloat(a[iKm].replace(',','.')) : NaN;
-    let tx = iTxt>=0 ? a[iTxt] : "";
-
-    if(!isNaN(km)){
-      wps.push({id:id, km:km, txt:tx});
-    }
-  }
-
-  wps.sort((a,b)=>a.km-b.km);
-  render();
+// =========================
+//  AUDIO + VIBRATION + TTS
+// =========================
+function beep(freq=880, ms=200){
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.frequency.value = freq;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + ms/1000);
+    setTimeout(()=>{ o.stop(); ctx.close(); }, ms);
+  } catch(e){}
 }
 
-function render(){
-  let H='';
-  for(let w of wps){
-    H += `<div>${w.id} — ${w.km.toFixed(3)} km — ${w.txt}</div>`;
-  }
-  $('wpList').innerHTML = H;
-  nextWp();
+function vibrate(ms=250){
+  if (navigator.vibrate) navigator.vibrate(ms);
 }
 
-// ---------------------------
-// GPS INITIALIZATION (ON LOAD)
-// ---------------------------
+function speak(msg){
+  try {
+    const u = new SpeechSynthesisUtterance(msg);
+    u.lang = "sl-SI";
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch(e){}
+}
+
+
+// =========================
+//  Haversine
+// =========================
+function hav(p1, p2){
+  const R = 6371000;
+  const toRad = d => d * Math.PI/180;
+
+  const dLat = toRad(p2.lat - p1.lat);
+  const dLon = toRad(p2.lon - p1.lon);
+
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(p1.lat)) *
+            Math.cos(toRad(p2.lat)) *
+            Math.sin(dLon/2)**2;
+
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+
+// =========================
+//  GPS LOGIC — STARTED ON LOAD
+// =========================
 function gpsInit(){
-  if(!navigator.geolocation){
-    $('gpss').textContent='Ni GPS podpore';
+  if (!navigator.geolocation){
+    $("gpsStatus").textContent = "GPS ni podprt";
     return;
   }
 
   watchId = navigator.geolocation.watchPosition(pos=>{
-    let acc = pos.coords.accuracy;
-    $('acca').textContent = "Natančnost: " + Math.round(acc) + " m";
+    gpsReady = true;
 
-    let now = {lat:pos.coords.latitude, lon:pos.coords.longitude};
+    const acc = pos.coords.accuracy;
+    $("accStatus").textContent = `Natančnost: ${Math.round(acc)} m`;
 
-    if(acc <= maxA){
-      if(last){
-        let d = hav(last,now);
-        if(measure && d >= minS){
-          total += d;
-          partial += d;
-          update();
-          checkWP();
+    const pNow = {
+      lat: pos.coords.latitude,
+      lon: pos.coords.longitude,
+    };
+
+    if (acc <= maxAcc){
+      if (lastPos){
+        const d = hav(lastPos, pNow);
+        if (measure && d >= minStep){
+          total_m += d;
+          partial_m += d;
+          updateMeters();
+          checkWaypointAlerts();
         }
       }
-      last = now;
+      lastPos = pNow;
     }
+  },
+  err=>{
+    $("gpsStatus").textContent = "GPS napaka";
+  },
+  {
+    enableHighAccuracy:true,
+    maximumAge:0,
+    timeout:8000
+  });
 
-  }, err=>{
-    $('gpss').textContent="GPS napaka";
-  }, {enableHighAccuracy:true, maximumAge:0, timeout:5000});
-
-  $('gpss').textContent = "GPS aktiviran";
+  $("gpsStatus").textContent = "GPS aktiviran… čakam stabilen signal";
 }
 
-// ---------------------------
-// WAYPOINT ALERTS
-// ---------------------------
-function checkWP(){
-  for(let w of wps){
-    let d = w.km*1000 - total;
-    if(d > 0 && d <= leadM){
-      showAlert(w.txt || ("Točka " + w.id));
-      // mark as fired:
-      w.km = Infinity;
-      break;
+
+// =========================
+//  WAYPOINT ALERT LOGIC
+// =========================
+function checkWaypointAlerts(){
+  for (let wp of waypoints){
+    if (wp.passed) continue;
+
+    const distTo = wp.total_km*1000 - total_m;
+
+    if (!wp.alerted && distTo <= lead_m && distTo > 0){
+      wp.alerted = true;
+
+      // AUDIO + TTS + vibracije
+      beep(880,180);
+      setTimeout(()=>beep(660,180), 220);
+      vibrate(250);
+      speak(wp.text || `Pozor, točka ${wp.id}`);
+
+      showAlert(wp.text || `Točka ${wp.id}`);  
+    }
+
+    if (!wp.passed && distTo <= 0){
+      wp.passed = true;
     }
   }
+
+  saveLocal();
+  renderWaypoints();
+  updateNextWaypoint();
 }
 
-// ---------------------------
-// CSV DISCOVERY (GitHub repo root)
-// ---------------------------
-async function discoverCsv(){
-  let api = `https://api.github.com/repos/${USER}/${REPO}/contents/`;
 
-  let resp = await fetch(api).then(r=>r.json()).catch(_=>[]);
-  let csvs = resp.filter(f=>f.name && f.name.endsWith(".csv")).map(f=>f.name);
-
-  if(!csvs.length){
-    $('csvSel').innerHTML = '<option>(Ni .csv datotek)</option>';
+// =========================
+//  UPDATE NEXT WAYPOINT DISPLAY
+// =========================
+function updateNextWaypoint(){
+  if (!waypoints.length){
+    $("nextDist").textContent = "— m";
+    $("nextLabel").textContent = "Ni točk";
     return;
   }
 
-  $('csvSel').innerHTML =
-    csvs.map(n => `<option value="${location.origin + location.pathname.replace('index.html','') + n}">${n}</option>`).join('');
+  let best = null;
+  let smallestDist = Infinity;
 
-  // Auto-load if only 1 CSV:
-  if(csvs.length===1){
-    let url = location.origin + location.pathname.replace('index.html','') + csvs[0];
+  for (let wp of waypoints){
+    const d = wp.total_km*1000 - total_m;
+    if (d > 0 && d < smallestDist){
+      smallestDist = d;
+      best = wp;
+    }
+  }
+
+  if (!best){
+    $("nextDist").textContent = "— m";
+    $("nextLabel").textContent = "Ni več točk";
+    return;
+  }
+
+  $("nextDist").textContent = Math.round(smallestDist) + " m";
+  $("nextLabel").textContent = `#${best.id} @ ${best.total_km.toFixed(3)} km — ${best.text}`;
+}
+
+
+// =========================
+//  CSV PARSING (TOTAL & PARTIAL)
+// =========================
+function parseCsv(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  if (!lines.length) return [];
+
+  const head = lines[0].toLowerCase();
+  const delim = head.includes(";") ? ";" : ",";
+  const cols = head.split(delim).map(s=>s.trim());
+
+  const iId  = cols.findIndex(c=>["id","wp","waypoint"].includes(c));
+  const iTot = cols.findIndex(c=>["distance_km","total_km","dist_km"].includes(c));
+  const iPar = cols.findIndex(c=>["partial_km","delta_km"].includes(c));
+  const iTxt = cols.findIndex(c=>["text","opis","note","description"].includes(c));
+
+  let arr = [];
+  let cumulative = 0;
+
+  for (let i=1;i<lines.length;i++){
+    const raw = lines[i].split(delim).map(s=>s.trim());
+    if (!raw.length) continue;
+
+    let id  = iId>=0 ? raw[iId] : (i);
+    let txt = iTxt>=0 ? raw[iTxt] : "";
+
+    let tkm = NaN;
+
+    if (basis==="total"){
+      if (iTot>=0) tkm = parseFloat(raw[iTot].replace(",","."));  
+    }
+    else if (basis==="partial"){
+      if (iPar>=0){
+        const pkm = parseFloat(raw[iPar].replace(",",".")) || 0;
+        cumulative += pkm;
+        tkm = cumulative;
+      }
+    }
+
+    // fallback: če ni partial, uporabi total, če je na voljo
+    if (isNaN(tkm) && iTot>=0){
+      tkm = parseFloat(raw[iTot].replace(",","."));  
+    }
+
+    if (!isNaN(tkm)){
+      arr.push({
+        id:id,
+        total_km: tkm,
+        text:txt,
+        alerted:false,
+        passed:false
+      });
+    }
+  }
+
+  return arr.sort((a,b)=>a.total_km - b.total_km);
+}
+
+
+// =========================
+//  RENDER WAYPOINTS LIST
+// =========================
+function renderWaypoints(){
+  const box = $("wpList");
+
+  if (!waypoints.length){
+    box.innerHTML = `<div style="opacity:.7">Ni naloženih točk</div>`;
+    return;
+  }
+
+  let html = "";
+
+  waypoints.forEach((wp, idx)=>{
+    const dist = Math.round(wp.total_km*1000 - total_m);
+    const state = wp.passed ? "✔️" : (wp.alerted ? "⚠️" : "");
+
+    html += `
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <div>
+          <b>#${wp.id}</b>
+          ${wp.total_km.toFixed(3)} km — 
+          ${wp.text}
+          <span style="opacity:.6">${state}</span>
+        </div>
+
+        <div>
+          <button data-wp="${idx}" class="wpJump">Skok</button>
+          <button data-del="${idx}" class="wpDel danger">X</button>
+        </div>
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
+
+  // bind events
+  document.querySelectorAll(".wpJump").forEach(btn=>{
+    btn.onclick = ()=>{
+      let wp = waypoints[btn.dataset.wp];
+      total_m = wp.total_km*1000 - (lead_m+1);
+      partial_m = 0;
+      updateMeters();
+    };
+  });
+
+  document.querySelectorAll(".wpDel").forEach(btn=>{
+    btn.onclick = ()=>{
+      waypoints.splice(btn.dataset.del, 1);
+      saveLocal();
+      renderWaypoints();
+      updateNextWaypoint();
+    };
+  });
+}
+
+
+// =========================
+//  UPDATE TOTAL/PARTIAL UI
+// =========================
+function updateMeters(){
+  $("total").textContent   = fmtKm(total_m);
+  $("partial").textContent = fmtKm(partial_m);
+  updateNextWaypoint();
+}
+
+
+// =========================
+//  LOCAL STORAGE
+//
+,Continue to DELO 3…
+</script>
+<script>
+// =========================
+// LOCAL STORAGE
+// =========================
+function saveLocal(){
+  localStorage.setItem("lead_m", lead_m);
+  localStorage.setItem("maxAcc", maxAcc);
+  localStorage.setItem("minStep", minStep);
+  localStorage.setItem("autoHide", autoHide);
+  localStorage.setItem("basis", basis);
+  localStorage.setItem("csv_url", currentCsvUrl);
+  localStorage.setItem("waypoints", JSON.stringify(waypoints));
+}
+
+function loadLocal(){
+  try {
+    lead_m  = Number(localStorage.getItem("lead_m"))  || 50;
+    maxAcc  = Number(localStorage.getItem("maxAcc"))  || 30;
+    minStep = Number(localStorage.getItem("minStep")) || 2;
+    autoHide = (Number(localStorage.getItem("autoHide"))||8)*1000;
+    basis = localStorage.getItem("basis") || "total";
+
+    const wp = JSON.parse(localStorage.getItem("waypoints")||"[]");
+    if (Array.isArray(wp)) waypoints = wp;
+  } catch(e){}
+}
+
+
+// =========================
+// CSV AUTO‑DISCOVERY
+// =========================
+async function discoverCsv(){
+  const api = `https://api.github.com/repos/${USER}/${REPO}/contents/`;
+
+  let resp = await fetch(api)
+    .then(r=>r.json())
+    .catch(()=>[]);
+
+  let csvs = resp
+    .filter(f=>f?.name?.toLowerCase().endsWith(".csv"))
+    .map(f=>f.name);
+
+  const sel = $("csvSelect");
+
+  if (!csvs.length){
+    sel.innerHTML = `<option>(Ni CSV datotek)</option>`;
+    return;
+  }
+
+  sel.innerHTML = csvs
+    .map(name => {
+      let u = location.origin + location.pathname.replace("index.html","") + name;
+      return `<option value="${u}">${name}</option>`;
+    })
+    .join("");
+
+  // Auto‑load if only one
+  if (csvs.length === 1){
+    let url = location.origin + location.pathname.replace("index.html","") + csvs[0];
+    currentCsvUrl = url;
     await loadCsv(url);
   }
 }
 
-// ---------------------------
-// ON LOAD
-// ---------------------------
-window.onload = async ()=>{
 
-  gpsInit();        // GPS tracking takoj, še pred START
-  discoverCsv();    // odkrij CSV v root-u
+// =========================
+// LOAD CSV (URL / local file / auto)
+// =========================
+async function loadCsv(url){
+  try {
+    const txt = await fetch(url, {cache:"no-store"}).then(r=>r.text());
+    currentCsvUrl = url;
+    localStorage.setItem("lastCsvText", txt);
 
-  // če obstaja prej uporabljeni CSV in še nismo nič naložili
-  let lc = localStorage.csv_url;
-  if(lc && !wps.length){
-    await loadCsv(lc);
+    waypoints = parseCsv(txt);
+    saveLocal();
+    renderWaypoints();
+    updateNextWaypoint();
+  }
+  catch(e){
+    showAlert("Napaka pri nalaganju CSV");
+  }
+}
+
+
+// =========================
+// EXPORT CSV
+// =========================
+function exportCsv(){
+  let out = "id,distance_km,text\n";
+  waypoints.forEach(w=>{
+    out += `${w.id},${w.total_km.toFixed(3)},"${w.text.replace(/"/g,'""')}"\n`;
+  });
+
+  const blob = new Blob([out], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "export_waypoints.csv";
+  a.click();
+}
+
+
+// =========================
+// WAKE‑LOCK
+// =========================
+let wakeObj = null;
+
+async function toggleWakeLock(){
+  try {
+    if (!wakeObj){
+      wakeObj = await navigator.wakeLock.request("screen");
+      $("btnWakeLock").textContent = "🔒 ON";
+      wakeObj.addEventListener("release", ()=>{ 
+        $("btnWakeLock").textContent = "🔆 OFF"; wakeObj=null;
+      });
+    } else {
+      await wakeObj.release();
+      wakeObj = null;
+      $("btnWakeLock").textContent = "🔆 OFF";
+    }
+  } catch(e){
+    showAlert("Wake‑lock ni podprt");
+  }
+}
+
+
+// =========================
+// BUTTON BINDINGS
+// =========================
+$("btnStart").onclick = ()=>{
+  measure = true;
+  partial_m = 0;
+  updateMeters();
+};
+
+$("btnStop").onclick = ()=>{ measure = false; };
+
+$("btnTotalReset").onclick = ()=>{
+  total_m = 0;
+  partial_m = 0;
+  waypoints.forEach(w=>{ w.alerted=false; w.passed=false; });
+  saveLocal();
+  updateMeters();
+};
+
+$("btnPartialReset").onclick = ()=>{
+  partial_m = 0;
+  updateMeters();
+};
+
+$("btnTotalMinus").onclick = ()=>{
+  total_m = Math.max(0, total_m - 10);
+  updateMeters();
+};
+
+$("btnTotalPlus").onclick = ()=>{
+  total_m += 10;
+  updateMeters();
+};
+
+$("btnPartialMinus").onclick = ()=>{
+  partial_m = Math.max(0, partial_m - 10);
+  updateMeters();
+};
+
+$("btnPartialPlus").onclick = ()=>{
+  partial_m += 10;
+  updateMeters();
+};
+
+$("btnSetTotal").onclick = ()=>{
+  let v = parseFloat($("setTotalInput").value.replace(",","."));
+  if (!isNaN(v)){
+    total_m = v*1000;
+    updateMeters();
   }
 };
 
-// ---------------------------
-// BUTTONS
-// ---------------------------
-$('startBtn').onclick = ()=>{ measure=true; partial=0; update(); };
-$('stopBtn').onclick  = ()=>{ measure=false; };
 
-$('rT').onclick = ()=>{ total=0; partial=0; update(); };
-$('rP').onclick = ()=>{ partial=0; update(); };
-
-$('tm').onclick = ()=>{ total=Math.max(0,total-10); update(); };
-$('tp').onclick = ()=>{ total+=10; update(); };
-
-$('pm').onclick = ()=>{ partial=Math.max(0,partial-10); update(); };
-$('pp').onclick = ()=>{ partial+=10; update(); };
-
-$('setTb').onclick = ()=>{
-  let v = parseFloat($('setT').value.replace(',','.'));
-  if(!isNaN(v)){ total=v*1000; update(); }
+// LOAD CSV – SELECTED
+$("btnLoadSelected").onclick = ()=>{
+  const url = $("csvSelect").value;
+  if (url) loadCsv(url);
 };
 
-$('lead').onchange   = e=> leadM = parseFloat(e.target.value)||50;
-$('maxAcc').onchange = e=> maxA = parseFloat(e.target.value)||30;
-$('minStep').onchange= e=> minS = parseFloat(e.target
+// LOAD CSV – URL
+$("btnLoadUrl").onclick = ()=>{
+  const url = $("csvUrlInput").value.trim();
+  if (url) loadCsv(url);
+};
+
+// LOAD CSV – local file
+$("csvFileInput").onchange = async (e)=>{
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const txt = await file.text();
+  waypoints = parseCsv(txt);
+  saveLocal();
+  renderWaypoints();
+  updateNextWaypoint();
+};
+
+
+// ADD WAYPOINT @TOTAL
+$("btnAddWpHere").onclick = ()=>{
+  const txt = $("quickWpText").value.trim();
+  const id = waypoints.length ? (Number(waypoints[waypoints.length-1].id)+1) : 1;
+  waypoints.push({
+    id:id,
+    total_km: total_m/1000,
+    text:txt,
+    alerted:false,
+    passed:false
+  });
+  waypoints.sort((a,b)=>a.total_km-b.total_km);
+  saveLocal();
+  renderWaypoints();
+  updateNextWaypoint();
+  $("quickWpText").value = "";
+};
+
+// CLEAR WAYPOINTS
+$("btnClearWps").onclick = ()=>{
+  if (confirm("Res želiš odstraniti vse točke?")){
+    waypoints = [];
+    saveLocal();
+    renderWaypoints();
+    updateNextWaypoint();
+  }
+};
+
+// EXPORT CSV
+$("btnExportCsv").onclick = ()=> exportCsv();
+
+
+// SETTINGS INPUTS
+$("leadInput").onchange = e=>{
+  lead_m = Number(e.target.value)||50;
+  saveLocal();
+};
+
+$("maxAccInput").onchange = e=>{
+  maxAcc = Number(e.target.value)||30;
+  saveLocal();
+};
+
+$("minStepInput").onchange = e=>{
+  minStep = Number(e.target.value)||2;
+  saveLocal();
+};
+
+$("autoHideInput").onchange = e=>{
+  autoHide = (Number(e.target.value)||8)*1000;
+  saveLocal();
+};
+
+
+// =========================
+// STARTUP INIT
+// =========================
+window.onload = async ()=>{
+
+  // Load saved settings
+  loadLocal();
+
+  // Fill settings
+  $("leadInput").value = lead_m;
+  $("maxAccInput").value = maxAcc;
+  $("minStepInput").value = minStep;
+  $("autoHideInput").value = autoHide/1000;
+
+  // Restore waypoints (if any)
+  renderWaypoints();
+  updateNextWaypoint();
+
+  // Start GPS immediately
+  gpsInit();
+
+  // Autodiscover CSV in repo
+  await discoverCsv();
+
+  // Load ?csv= URL
+  const qp = new URLSearchParams(location.search).get("csv");
+  if (qp){
+    await loadCsv(qp);
+  }
+
+  // Load last CSV if waypoints are empty
+  const lastTxt = localStorage.getItem("lastCsvText");
+  if (lastTxt && !waypoints.length){
+    waypoints = parseCsv(lastTxt);
+    renderWaypoints();
+    updateNextWaypoint();
+  }
+
+  // Wakelock button now exists:
+  if (!$("btnWakeLockAdded")){
+    const btn = document.createElement("button");
+    btn.id = "btnWakeLock";
+    btn.textContent = "🔆 OFF";
+    btn.onclick = toggleWakeLock;
+
+    const partialCard = document.querySelector(".card:nth-child(2) .row");
+    partialCard.appendChild(btn);
+  }
+};
+</script>
+
+</body>
+</html>
