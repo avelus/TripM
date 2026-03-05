@@ -45,18 +45,9 @@ button, input, select{
   font-size:1rem;
 }
 button{ cursor:pointer; }
-.primary{
-  background:#143247;
-  border-color:#255a79;
-}
-.ok{
-  background:#0f2b22;
-  border-color:#1c5b45;
-}
-.danger{
-  background:#3a1618;
-  border-color:#6b2226;
-}
+.primary{ background:#143247; border-color:#255a79; }
+.ok{ background:#0f2b22; border-color:#1c5b45; }
+.danger{ background:#3a1618; border-color:#6b2226; }
 .list{
   max-height:220px;
   overflow:auto;
@@ -79,6 +70,27 @@ button{ cursor:pointer; }
   z-index:9999;
   text-align:center;
 }
+
+/* NOVO: Status/Log panel */
+.log{
+  max-height:260px;
+  overflow:auto;
+  border:1px dashed #34465e;
+  background:#0f1620;
+  padding:8px;
+  border-radius:10px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:.9rem;
+  line-height:1.35;
+  white-space:pre-wrap;
+}
+.kv{
+  display:grid;
+  grid-template-columns: 130px 1fr;
+  gap:6px 10px;
+}
+.kv > div:nth-child(odd){ color:#a3b8d4; }
+.kv > div:nth-child(even){ color:#eaf2ff; }
 </style>
 </head>
 
@@ -95,8 +107,12 @@ button{ cursor:pointer; }
     <button id="setTb" class="ok">Nastavi</button>
     <button id="rT" class="danger">Reset TOTAL</button>
   </div>
-  <div class="label" id="gpss">GPS inicializacija…</div>
-  <div class="label" id="acca">Natančnost: —</div>
+
+  <div class="kv" style="margin-top:8px">
+    <div>GPS status:</div><div id="gpss">GPS inicializacija…</div>
+    <div>Natančnost:</div><div id="acca">—</div>
+    <div>Koordinate:</div><div id="coords">—</div>
+  </div>
 </div>
 
 <!-- PARTIAL -->
@@ -156,27 +172,45 @@ button{ cursor:pointer; }
   </div>
 </div>
 
+<!-- STATUS / LOG -->
+<div class="card">
+  <div class="label">Status & Log (GPS/CSV/Waypoints)</div>
+  <div id="log" class="log"></div>
+</div>
+
 <!-- ALERT POPUP -->
 <div id="alert" class="alert">
   <div id="amsg">Opozorilo</div>
 </div>
 
-
 <script>
-// ---------------------------
-// GLOBALS
-// ---------------------------
+/* =========================
+   GLOBALS
+   ========================= */
 let watchId=null,last=null,total=0,partial=0,measure=false;
 let leadM=50, maxA=30, minS=2;
 let wps=[], autoHide=8000; // ms
 const USER="avelus", REPO="TripM";
+const LOG_MAX=300;
 
-// SHORTHAND
 const $ = id => document.getElementById(id);
+const ts = () => new Date().toLocaleTimeString();
 
-// ---------------------------
-// FORMAT & MATH
-// ---------------------------
+/* ============ LOGGING ============ */
+function logStatus(msg){
+  const box = $('log');
+  const line = `[${ts()}] ${msg}`;
+  box.textContent += (box.textContent ? "\n" : "") + line;
+  // trim log
+  const lines = box.textContent.split("\n");
+  if(lines.length > LOG_MAX){
+    box.textContent = lines.slice(lines.length-LOG_MAX).join("\n");
+  }
+  // autoscroll
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ============ FORMAT & MATH ============ */
 function fmt(x){ return (x/1000).toFixed(3); }
 function hav(a,b){
   const R=6371000, toRad=d=>d*Math.PI/180;
@@ -186,9 +220,7 @@ function hav(a,b){
   return 2*R*Math.asin(Math.sqrt(h));
 }
 
-// ---------------------------
-// UI UPDATE
-// ---------------------------
+/* ============ UI UPDATE ============ */
 function update(){
   $('total').textContent = fmt(total);
   $('partial').textContent = fmt(partial);
@@ -218,9 +250,7 @@ function nextWp(){
   $('nextL').textContent = label;
 }
 
-// ---------------------------
-// ALERT (bottom fixed, auto-hide 8s)
-// ---------------------------
+/* ============ ALERT (bottom-fixed) ============ */
 function showAlert(msg){
   $('amsg').textContent = msg || 'Opozorilo';
   const a = $('alert');
@@ -229,9 +259,7 @@ function showAlert(msg){
   showAlert._t = setTimeout(()=>a.style.display='none', autoHide);
 }
 
-// ---------------------------
-// AUDIO + VIBRA + TTS
-// ---------------------------
+/* ============ AUDIO + VIBRA + TTS ============ */
 function beep(freq=880,ms=180){
   try{
     const C=window.AudioContext||window.webkitAudioContext;
@@ -249,15 +277,17 @@ function say(txt){
   }catch(e){}
 }
 
-// ---------------------------
-// CSV LOADING/PARSING
-// ---------------------------
+/* ============ CSV LOGIC ============ */
 async function loadCsv(url){
-  const txt = await fetch(url,{cache:'no-store'}).then(r=>r.text());
+  logStatus(`CSV: nalagam ${url}`);
+  const res = await fetch(url,{cache:'no-store'});
+  if(!res.ok){ logStatus(`CSV: napaka HTTP ${res.status}`); showAlert('Napaka pri CSV'); return; }
+  const txt = await res.text();
   localStorage.csv_url = url;
   localStorage.lastCsv = txt;
   parseCsvIntoWps(txt);
   render();
+  logStatus(`CSV: naloženo ${wps.length} točk`);
 }
 function parseCsvIntoWps(txt){
   const rows = txt.split(/\r?\n/).filter(l=>l.trim());
@@ -271,7 +301,9 @@ function parseCsvIntoWps(txt){
   const iPar = cols.findIndex(c=>['partial_km','delta_km'].includes(c));
   const iTxt = cols.findIndex(c=>['text','opis','note','desc'].includes(c));
 
-  let arr=[], cum=0;
+  let arr=[], cum=0, usedBasis = (iPar>=0 && iTot<0) ? 'partial' : 'total';
+  logStatus(`CSV: zaznan basis = ${usedBasis}`);
+
   for(let i=1;i<rows.length;i++){
     const a = rows[i].split(delim).map(s=>s.trim());
     if(!a.length) continue;
@@ -279,11 +311,12 @@ function parseCsvIntoWps(txt){
     const txt = iTxt>=0 ? a[iTxt] : '';
     let km = NaN;
 
-    // Podpira total ali partial
-    if(iTot>=0) km = parseFloat(String(a[iTot]).replace(',','.'));
-    if((isNaN(km) || km===undefined) && iPar>=0){
+    if(usedBasis==='total' && iTot>=0){
+      km = parseFloat(String(a[iTot]).replace(',','.'));
+    }else if(usedBasis==='partial' && iPar>=0){
       const pk = parseFloat(String(a[iPar]).replace(',','.'));
-      if(!isNaN(pk)) { cum += pk; km = cum; }
+      if(!isNaN(pk)) cum += pk;
+      km = cum;
     }
     if(isNaN(km)) continue;
 
@@ -291,6 +324,8 @@ function parseCsvIntoWps(txt){
   }
   wps = arr.sort((a,b)=>a.km-b.km);
 }
+
+/* ============ RENDER WP LIST ============ */
 function render(){
   let H='';
   for(let i=0;i<wps.length;i++){
@@ -310,19 +345,20 @@ function render(){
   }
   $('wpList').innerHTML = H || `<div style="opacity:.7">Ni točk</div>`;
 
-  // Bindi gumbov
   document.querySelectorAll('[data-jump]').forEach(b=>{
     b.onclick = ()=>{
       const w = wps[b.dataset.jump];
       total = w.km*1000 - (leadM+1);
       partial = 0;
       update();
+      logStatus(`WP: Skok na #${w.id}, set TOTAL≈${fmt(total)} km`);
     };
   });
   document.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick = ()=>{
+      const w = wps[b.dataset.del];
+      logStatus(`WP: brisanje #${w.id}`);
       wps.splice(b.dataset.del,1);
-      saveLocal();
       render(); nextWp();
     };
   });
@@ -330,139 +366,144 @@ function render(){
   nextWp();
 }
 
-// ---------------------------
-// GPS INITIALIZATION (pre-warm + watch ON LOAD)
-// ---------------------------
+/* ============ GPS INIT: pre-warm + watch ON LOAD ============ */
 function gpsInit(){
   if(!navigator.geolocation){
     $('gpss').textContent='Ni GPS podpore';
+    logStatus('GPS: ni podpore v brskalniku');
     return;
   }
-  // 1) Pre-warm: sproži permission + ogreje gps čip
+  // 1) Pre-warm
   navigator.geolocation.getCurrentPosition(
-    ()=>{$('gpss').textContent='GPS dovoljenje OK, ogrevam…';},
-    ()=>{$('gpss').textContent='GPS: dovoli dostop za natančnost';},
+    p=>{
+      $('gpss').textContent='GPS dovoljenje OK, ogrevam…';
+      logStatus(`GPS pre-warm OK @ acc≈${Math.round(p.coords.accuracy)} m`);
+    },
+    e=>{
+      $('gpss').textContent='GPS: dovoli lokacijo!';
+      logStatus(`GPS pre-warm ERR: ${e.message||e.code}`);
+    },
     { enableHighAccuracy:true, timeout:5000 }
   );
 
-  // 2) Neprekinjeno sledenje: takoj ob zagonu
+  // 2) watchPosition
   watchId = navigator.geolocation.watchPosition(pos=>{
     const acc = pos.coords.accuracy;
     $('acca').textContent = "Natančnost: " + Math.round(acc) + " m";
+    $('coords').textContent = pos.coords.latitude.toFixed(6) + ", " + pos.coords.longitude.toFixed(6);
 
     const now = {lat:pos.coords.latitude, lon:pos.coords.longitude};
 
     if(acc <= maxA){
       if(last){
         const d = hav(last, now);
-        if(measure && d >= minS){
-          total += d;
-          partial += d;
-          update();
-          checkWP();
+        if(d>0){
+          if(measure && d >= minS){
+            total += d;
+            partial += d;
+            update();
+            checkWP();
+            logStatus(`GPS Δ=${d.toFixed(1)} m, TOTAL=${fmt(total)} km (acc=${Math.round(acc)} m)`);
+          }else{
+            logStatus(`GPS Δ=${d.toFixed(1)} m ignorirano (measure=${measure}, minStep=${minS} m)`);
+          }
         }
+      }else{
+        logStatus('GPS prvi fix OK (acc='+Math.round(acc)+' m)');
       }
       last = now;
+    }else{
+      logStatus(`GPS točka ignorirana (acc=${Math.round(acc)} m > maxAcc=${maxA} m)`);
     }
   }, err=>{
     $('gpss').textContent="GPS napaka";
+    logStatus('GPS watch ERR: '+(err.message||err.code));
   }, { enableHighAccuracy:true, maximumAge:0, timeout:8000 });
 
   $('gpss').textContent = "GPS aktiviran…";
+  logStatus('GPS watch zagnan');
 }
 
-// ---------------------------
-// WAYPOINT ALERTS (alerted/passed)
-// ---------------------------
+/* ============ WAYPOINT ALERTS ============ */
 function checkWP(){
   for(let w of wps){
     if(w.passed) continue;
     const d = w.km*1000 - total;
-
     if(!w.alerted && d <= leadM && d > 0){
       w.alerted = true;
       beep(880,180); setTimeout(()=>beep(660,180),220);
-      vibrate(200);  say(w.txt||`Točka ${w.id}`);
+      vibrate(200); say(w.txt||`Točka ${w.id}`);
       showAlert(w.txt || `Točka ${w.id}`);
+      logStatus(`ALERT #${w.id} @ ${w.km.toFixed(3)} km (${w.txt||''})`);
     }
     if(!w.passed && d <= 0){
       w.passed = true;
+      logStatus(`PASS #${w.id}`);
     }
   }
-  saveLocal(); render(); nextWp();
 }
 
-// ---------------------------
-// CSV DISCOVERY (GitHub repo root)
-// ---------------------------
+/* ============ DISCOVER CSV (repo root) ============ */
 async function discoverCsv(){
   const api = `https://api.github.com/repos/${USER}/${REPO}/contents/`;
+  logStatus('CSV discover: '+api);
   let resp = await fetch(api).then(r=>r.json()).catch(()=>[]);
   let csvs = resp.filter(f=>f.name && f.name.toLowerCase().endsWith('.csv')).map(f=>f.name);
-
   if(!csvs.length){
     $('csvSel').innerHTML = '<option>(Ni .csv datotek)</option>';
+    logStatus('CSV discover: nič najdenega');
     return;
   }
   $('csvSel').innerHTML = csvs.map(n=>{
     const u = location.origin + location.pathname.replace('index.html','') + n;
     return `<option value="${u}">${n}</option>`;
   }).join('');
-
-  // Auto-load, če je samo ena
+  logStatus(`CSV discover: najdenih ${csvs.length} datotek`);
   if(csvs.length===1){
     const url = location.origin + location.pathname.replace('index.html','') + csvs[0];
     await loadCsv(url);
   }
 }
 
-// ---------------------------
-// ON LOAD
-// ---------------------------
+/* ============ ON LOAD ============ */
 window.addEventListener('load', async ()=>{
-  // Nastavitve iz localStorage
+  // restore settings
   try{
-    leadM = Number(localStorage.getItem('lead_m')) || 50;
-    maxA  = Number(localStorage.getItem('maxAcc')) || 30;
-    minS  = Number(localStorage.getItem('minStep'))|| 2;
+    const lm = Number(localStorage.getItem('lead_m')); if(!isNaN(lm)) leadM=lm;
+    const ma = Number(localStorage.getItem('maxAcc')); if(!isNaN(ma)) maxA=ma;
+    const ms = Number(localStorage.getItem('minStep'));if(!isNaN(ms)) minS=ms;
     const lastTxt = localStorage.getItem('lastCsv') || localStorage.getItem('lastCsvText');
     if(lastTxt){ parseCsvIntoWps(lastTxt); }
   }catch(e){}
 
-  // Izpiši začetno
   render(); nextWp();
-  // Zaženi GPS takoj ob zagonu
-  gpsInit();
+  gpsInit();                 // << takoj po zagonu
+  await discoverCsv();       // auto seznam CSV
 
-  // Autodiscovery CSV v root
-  await discoverCsv();
-
-  // Podpora ?csv=
+  // ?csv=…
   const qp = new URLSearchParams(location.search).get('csv');
   if(qp){ await loadCsv(qp); }
 
-  // Če imamo prej izbran CSV, pa wps še prazni
+  // last used CSV, če nič še ni
   const lc = localStorage.getItem('csv_url');
   if(lc && !wps.length){ await loadCsv(lc); }
 });
 
-// ---------------------------
-// BUTTONS
-// ---------------------------
-$('startBtn').onclick = ()=>{ measure=true; partial=0; update(); };
-$('stopBtn').onclick  = ()=>{ measure=false; };
+/* ============ BUTTONS ============ */
+$('startBtn').onclick = ()=>{ measure=true; partial=0; update(); logStatus('MEASURE=ON'); };
+$('stopBtn').onclick  = ()=>{ measure=false; logStatus('MEASURE=OFF'); };
 
-$('rT').onclick = ()=>{ total=0; partial=0; wps.forEach(w=>{w.alerted=false;w.passed=false;}); saveLocal(); update(); };
-$('rP').onclick = ()=>{ partial=0; update(); };
+$('rT').onclick = ()=>{ total=0; partial=0; wps.forEach(w=>{w.alerted=false;w.passed=false;}); update(); logStatus('TOTAL reset + WP state reset'); };
+$('rP').onclick = ()=>{ partial=0; update(); logStatus('PARTIAL reset'); };
 
-$('tm').onclick = ()=>{ total=Math.max(0,total-10); update(); };
-$('tp').onclick = ()=>{ total+=10; update(); };
-$('pm').onclick = ()=>{ partial=Math.max(0,partial-10); update(); };
-$('pp').onclick = ()=>{ partial+=10; update(); };
+$('tm').onclick = ()=>{ total=Math.max(0,total-10); update(); logStatus('TOTAL −0.010 km'); };
+$('tp').onclick = ()=>{ total+=10; update(); logStatus('TOTAL +0.010 km'); };
+$('pm').onclick = ()=>{ partial=Math.max(0,partial-10); update(); logStatus('PARTIAL −0.010 km'); };
+$('pp').onclick = ()=>{ partial+=10; update(); logStatus('PARTIAL +0.010 km'); };
 
 $('setTb').onclick = ()=>{
   const v = parseFloat(String($('setT').value).replace(',','.'));
-  if(!isNaN(v)){ total = Math.max(0, v*1000); update(); }
+  if(!isNaN(v)){ total = Math.max(0, v*1000); update(); logStatus('TOTAL set to '+fmt(total)+' km'); }
 };
 
 $('loadSel').onclick = ()=>{ const u = $('csvSel').value; if(u) loadCsv(u); };
@@ -472,19 +513,21 @@ $('addHere').onclick = ()=>{
   const txt = $('qTxt').value.trim();
   const id = wps.length ? (Number(wps[wps.length-1].id)||0)+1 : 1;
   wps.push({ id, km: total/1000, txt, alerted:false, passed:false });
-  wps.sort((a,b)=>a.km-b.km); saveLocal(); render(); nextWp(); $('qTxt').value='';
+  wps.sort((a,b)=>a.km-b.km);
+  render(); nextWp(); $('qTxt').value='';
+  logStatus(`WP add #${id} @ ${fmt(total)} km`);
 };
-
-$('clr').onclick = ()=>{ if(confirm('Počisti vse točke?')){ wps=[]; saveLocal(); render(); nextWp(); } };
+$('clr').onclick = ()=>{ if(confirm('Počisti vse točke?')){ wps=[]; render(); nextWp(); logStatus('WP list cleared'); } };
 $('exp').onclick = ()=>{
   let S='id,distance_km,text\n'; wps.forEach(w=>{ S+=`${w.id},${w.km.toFixed(3)},"${w.txt.replace(/"/g,'""')}"\n`; });
   const B=new Blob([S],{type:'text/csv'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(B); a.download='export.csv'; a.click();
+  logStatus('CSV export');
 };
 
-$('lead'  ).onchange = e=>{ leadM = parseFloat(e.target.value)||50; localStorage.setItem('lead_m',leadM); };
-$('maxAcc').onchange = e=>{ maxA  = parseFloat(e.target.value)||30; localStorage.setItem('maxAcc',maxA); };
-$('minStep').onchange= e=>{ minS  = parseFloat(e.target.value)||2;  localStorage.setItem('minStep',minS); };
+$('lead').onchange   = e=>{ leadM = parseFloat(e.target.value)||50; localStorage.setItem('lead_m',leadM); logStatus('Lead='+leadM+' m'); };
+$('maxAcc').onchange = e=>{ maxA  = parseFloat(e.target.value)||30; localStorage.setItem('maxAcc',maxA); logStatus('MaxAcc='+maxA+' m'); };
+$('minStep').onchange= e=>{ minS  = parseFloat(e.target.value)||2;  localStorage.setItem('minStep',minS); logStatus('MinStep='+minS+' m'); };
 </script>
 
 </body>
