@@ -129,6 +129,7 @@ button{ cursor:pointer; }
   <div class="row">
     <button id="btnStart" class="primary">▶ START</button>
     <button id="btnStop">⏸ STOP</button>
+    <button id="btnWakeLock">🔆 OFF</button>
   </div>
 </div>
 
@@ -142,7 +143,6 @@ button{ cursor:pointer; }
 <!-- CSV LOADING -->
 <div class="card">
   <div class="label">CSV datoteke (root – auto discovery)</div>
-
   <div class="row">
     <select id="csvSelect" style="min-width:200px"></select>
     <button id="btnLoadSelected" class="primary">Naloži</button>
@@ -195,648 +195,464 @@ button{ cursor:pointer; }
 <div id="alertBox" class="alert">
   <div id="alertMsg">Opozorilo</div>
 </div>
+
+
+<!-- FULL APPLICATION LOGIC -->
 <script>
-// =========================
-//  GLOBAL STATE
-// =========================
-let watchId = null;
-let gpsReady = false;
-let measure = false;
+let watchId=null,gpsReady=false,measure=false;
+let lastPos=null,total_m=0,partial_m=0;
+let lead_m=50,maxAcc=30,minStep=2;
+let autoHide=8000;
+let waypoints=[];
+let currentCsvUrl="";
+let basis="total";
 
-let lastPos = null;
-let total_m = 0;
-let partial_m = 0;
-
-let lead_m = 50;
-let maxAcc = 30;
-let minStep = 2;
-let autoHide = 8000;  // 8s
-
-let waypoints = [];   // {id, total_km, text, alerted, passed}
-let currentCsvUrl = "";
-let basis = "total";  // lahko total ali partial
-
-const USER = "avelus";
-const REPO = "TripM";
-
-const fmtKm = m => (m/1000).toFixed(3);
-const $ = id => document.getElementById(id);
+const USER="avelus", REPO="TripM";
+const fmtKm=m=>(m/1000).toFixed(3);
+const $=id=>document.getElementById(id);
 
 
-// =========================
-//  ALERT SYSTEM (bottom popup)
-// =========================
-let alertTimeout = null;
-
+// ----------------------------------------------------
+// ALERT
+// ----------------------------------------------------
+let alertTimeout=null;
 function showAlert(msg){
-  const box = $("alertBox");
-  $("alertMsg").textContent = msg;
-
-  box.style.display = "block";
-
+  $("alertMsg").textContent=msg;
+  const a=$("alertBox");
+  a.style.display="block";
   clearTimeout(alertTimeout);
-  alertTimeout = setTimeout(()=>{
-    box.style.display = "none";
-  }, autoHide);
+  alertTimeout=setTimeout(()=>a.style.display="none",autoHide);
 }
 
 
-// =========================
-//  AUDIO + VIBRATION + TTS
-// =========================
-function beep(freq=880, ms=200){
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.frequency.value = freq;
-    o.connect(g); g.connect(ctx.destination);
-    o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + ms/1000);
-    setTimeout(()=>{ o.stop(); ctx.close(); }, ms);
-  } catch(e){}
+// ----------------------------------------------------
+// AUDIO / VIBRATION / TTS
+// ----------------------------------------------------
+function beep(freq=880,ms=180){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator();const g=ctx.createGain();
+    o.frequency.value=freq;
+    o.connect(g);g.connect(ctx.destination);
+    o.start();g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+ms/1000);
+    setTimeout(()=>{o.stop();ctx.close();},ms);
+  }catch(e){}
 }
-
 function vibrate(ms=250){
-  if (navigator.vibrate) navigator.vibrate(ms);
+  if(navigator.vibrate) navigator.vibrate(ms);
 }
-
-function speak(msg){
-  try {
-    const u = new SpeechSynthesisUtterance(msg);
-    u.lang = "sl-SI";
+function speak(t){
+  try{
+    const u=new SpeechSynthesisUtterance(t);
+    u.lang="sl-SI";
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
-  } catch(e){}
+  }catch(e){}
 }
 
 
-// =========================
-//  Haversine
-// =========================
-function hav(p1, p2){
-  const R = 6371000;
-  const toRad = d => d * Math.PI/180;
-
-  const dLat = toRad(p2.lat - p1.lat);
-  const dLon = toRad(p2.lon - p1.lon);
-
-  const a = Math.sin(dLat/2)**2 +
-            Math.cos(toRad(p1.lat)) *
-            Math.cos(toRad(p2.lat)) *
-            Math.sin(dLon/2)**2;
-
-  return 2 * R * Math.asin(Math.sqrt(a));
+// ----------------------------------------------------
+// HAVERSINE
+// ----------------------------------------------------
+function hav(a,b){
+  const R=6371000,toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+  const h=Math.sin(dLat/2)**2+
+    Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
 }
 
 
-// =========================
-//  GPS LOGIC — STARTED ON LOAD
-// =========================
+// ----------------------------------------------------
+// GPS INIT (runs immediately)
+// ----------------------------------------------------
 function gpsInit(){
-  if (!navigator.geolocation){
-    $("gpsStatus").textContent = "GPS ni podprt";
+  if(!navigator.geolocation){
+    $("gpsStatus").textContent="GPS ni podprt";
     return;
   }
 
-  watchId = navigator.geolocation.watchPosition(pos=>{
-    gpsReady = true;
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    gpsReady=true;
+    const acc=pos.coords.accuracy;
+    $("accStatus").textContent="Natančnost: "+Math.round(acc)+" m";
 
-    const acc = pos.coords.accuracy;
-    $("accStatus").textContent = `Natančnost: ${Math.round(acc)} m`;
+    const now={lat:pos.coords.latitude,lon:pos.coords.longitude};
 
-    const pNow = {
-      lat: pos.coords.latitude,
-      lon: pos.coords.longitude,
-    };
-
-    if (acc <= maxAcc){
-      if (lastPos){
-        const d = hav(lastPos, pNow);
-        if (measure && d >= minStep){
-          total_m += d;
-          partial_m += d;
+    if(acc<=maxAcc){
+      if(lastPos){
+        const d=hav(lastPos,now);
+        if(measure && d>=minStep){
+          total_m+=d;
+          partial_m+=d;
           updateMeters();
-          checkWaypointAlerts();
+          checkWPAlerts();
         }
       }
-      lastPos = pNow;
+      lastPos=now;
     }
-  },
-  err=>{
-    $("gpsStatus").textContent = "GPS napaka";
-  },
-  {
-    enableHighAccuracy:true,
-    maximumAge:0,
-    timeout:8000
-  });
 
-  $("gpsStatus").textContent = "GPS aktiviran… čakam stabilen signal";
+  },
+  err=> $("gpsStatus").textContent="GPS napaka",
+  {enableHighAccuracy:true,maximumAge:0,timeout:8000});
+
+  $("gpsStatus").textContent="GPS aktiviran…";
 }
 
 
-// =========================
-//  WAYPOINT ALERT LOGIC
-// =========================
-function checkWaypointAlerts(){
-  for (let wp of waypoints){
-    if (wp.passed) continue;
+// ----------------------------------------------------
+// NEXT WAYPOINT
+// ----------------------------------------------------
+function updateNextWaypoint(){
+  if(!waypoints.length){
+    $("nextDist").textContent="— m";
+    $("nextLabel").textContent="Ni točk";
+    return;
+  }
 
-    const distTo = wp.total_km*1000 - total_m;
+  let best=null, bestD=Infinity;
+  for(let w of waypoints){
+    const d=w.total_km*1000-total_m;
+    if(d>0 && d<bestD){ bestD=d; best=w; }
+  }
 
-    if (!wp.alerted && distTo <= lead_m && distTo > 0){
-      wp.alerted = true;
+  if(!best){
+    $("nextDist").textContent="— m";
+    $("nextLabel").textContent="Ni več točk";
+    return;
+  }
 
-      // AUDIO + TTS + vibracije
-      beep(880,180);
-      setTimeout(()=>beep(660,180), 220);
-      vibrate(250);
-      speak(wp.text || `Pozor, točka ${wp.id}`);
+  $("nextDist").textContent=Math.round(bestD)+" m";
+  $("nextLabel").textContent=`#${best.id} @ ${best.total_km.toFixed(3)} km — ${best.text}`;
+}
 
-      showAlert(wp.text || `Točka ${wp.id}`);  
+
+// ----------------------------------------------------
+// WAYPOINT ALERTS
+// ----------------------------------------------------
+function checkWPAlerts(){
+  for(let w of waypoints){
+    if(w.passed) continue;
+
+    const d=w.total_km*1000 - total_m;
+
+    if(!w.alerted && d<=lead_m && d>0){
+      w.alerted=true;
+      beep(880,180); setTimeout(()=>beep(660,180),220);
+      vibrate(200);
+      speak(w.text||`Točka ${w.id}`);
+      showAlert(w.text||`Točka ${w.id}`);
     }
 
-    if (!wp.passed && distTo <= 0){
-      wp.passed = true;
+    if(!w.passed && d<=0){
+      w.passed=true;
     }
   }
 
   saveLocal();
-  renderWaypoints();
+  renderWpList();
   updateNextWaypoint();
 }
 
 
-// =========================
-//  UPDATE NEXT WAYPOINT DISPLAY
-// =========================
-function updateNextWaypoint(){
-  if (!waypoints.length){
-    $("nextDist").textContent = "— m";
-    $("nextLabel").textContent = "Ni točk";
-    return;
-  }
-
-  let best = null;
-  let smallestDist = Infinity;
-
-  for (let wp of waypoints){
-    const d = wp.total_km*1000 - total_m;
-    if (d > 0 && d < smallestDist){
-      smallestDist = d;
-      best = wp;
-    }
-  }
-
-  if (!best){
-    $("nextDist").textContent = "— m";
-    $("nextLabel").textContent = "Ni več točk";
-    return;
-  }
-
-  $("nextDist").textContent = Math.round(smallestDist) + " m";
-  $("nextLabel").textContent = `#${best.id} @ ${best.total_km.toFixed(3)} km — ${best.text}`;
+// ----------------------------------------------------
+// UPDATE METERS
+// ----------------------------------------------------
+function updateMeters(){
+  $("total").textContent=fmtKm(total_m);
+  $("partial").textContent=fmtKm(partial_m);
+  updateNextWaypoint();
 }
 
 
-// =========================
-//  CSV PARSING (TOTAL & PARTIAL)
-// =========================
-function parseCsv(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  if (!lines.length) return [];
+// ----------------------------------------------------
+// CSV PARSER
+// ----------------------------------------------------
+function parseCsv(txt){
+  const lines=txt.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
 
-  const head = lines[0].toLowerCase();
-  const delim = head.includes(";") ? ";" : ",";
-  const cols = head.split(delim).map(s=>s.trim());
+  const head=lines[0].toLowerCase();
+  const delim=head.includes(";")?";":",";
+  const cols=head.split(delim).map(s=>s.trim());
 
-  const iId  = cols.findIndex(c=>["id","wp","waypoint"].includes(c));
-  const iTot = cols.findIndex(c=>["distance_km","total_km","dist_km"].includes(c));
-  const iPar = cols.findIndex(c=>["partial_km","delta_km"].includes(c));
-  const iTxt = cols.findIndex(c=>["text","opis","note","description"].includes(c));
+  const iId=cols.findIndex(c=>["id","wp","waypoint"].includes(c));
+  const iTot=cols.findIndex(c=>["distance_km","total_km","dist_km"].includes(c));
+  const iPar=cols.findIndex(c=>["partial_km","delta_km"].includes(c));
+  const iTxt=cols.findIndex(c=>["text","opis","desc","note"].includes(c));
 
-  let arr = [];
-  let cumulative = 0;
+  let arr=[];
+  let cum=0;
 
-  for (let i=1;i<lines.length;i++){
-    const raw = lines[i].split(delim).map(s=>s.trim());
-    if (!raw.length) continue;
+  for(let i=1;i<lines.length;i++){
+    const raw=lines[i].split(delim).map(s=>s.trim());
+    if(!raw.length) continue;
 
-    let id  = iId>=0 ? raw[iId] : (i);
-    let txt = iTxt>=0 ? raw[iTxt] : "";
+    let id = iId>=0 ? raw[iId] : i;
+    let text = iTxt>=0 ? raw[iTxt] : "";
 
-    let tkm = NaN;
+    let km = NaN;
 
-    if (basis==="total"){
-      if (iTot>=0) tkm = parseFloat(raw[iTot].replace(",","."));  
+    if(basis==="total" && iTot>=0){
+      km=parseFloat(raw[iTot].replace(",","."));  
     }
-    else if (basis==="partial"){
-      if (iPar>=0){
-        const pkm = parseFloat(raw[iPar].replace(",",".")) || 0;
-        cumulative += pkm;
-        tkm = cumulative;
-      }
+    if(basis==="partial" && iPar>=0){
+      let p = parseFloat(raw[iPar].replace(",","."));
+      if(!isNaN(p)) cum+=p;
+      km=cum;
     }
-
-    // fallback: če ni partial, uporabi total, če je na voljo
-    if (isNaN(tkm) && iTot>=0){
-      tkm = parseFloat(raw[iTot].replace(",","."));  
+    if(isNaN(km) && iTot>=0){
+      km=parseFloat(raw[iTot].replace(",","."));  
     }
 
-    if (!isNaN(tkm)){
-      arr.push({
-        id:id,
-        total_km: tkm,
-        text:txt,
-        alerted:false,
-        passed:false
-      });
+    if(!isNaN(km)){
+      arr.push({id:id,total_km:km,text:text,alerted:false,passed:false});
     }
   }
 
-  return arr.sort((a,b)=>a.total_km - b.total_km);
+  return arr.sort((a,b)=>a.total_km-b.total_km);
 }
 
 
-// =========================
-//  RENDER WAYPOINTS LIST
-// =========================
-function renderWaypoints(){
-  const box = $("wpList");
-
-  if (!waypoints.length){
-    box.innerHTML = `<div style="opacity:.7">Ni naloženih točk</div>`;
+// ----------------------------------------------------
+// RENDER WP LIST
+// ----------------------------------------------------
+function renderWpList(){
+  const box=$("wpList");
+  if(!waypoints.length){
+    box.innerHTML='<div style="opacity:.6">Ni točk</div>';
     return;
   }
 
-  let html = "";
+  let html="";
+  waypoints.forEach((w,i)=>{
+    const dist=Math.round(w.total_km*1000-total_m);
+    const stat=w.passed? "✔️" : (w.alerted?"⚠️":"");
 
-  waypoints.forEach((wp, idx)=>{
-    const dist = Math.round(wp.total_km*1000 - total_m);
-    const state = wp.passed ? "✔️" : (wp.alerted ? "⚠️" : "");
-
-    html += `
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <div>
-          <b>#${wp.id}</b>
-          ${wp.total_km.toFixed(3)} km — 
-          ${wp.text}
-          <span style="opacity:.6">${state}</span>
-        </div>
-
-        <div>
-          <button data-wp="${idx}" class="wpJump">Skok</button>
-          <button data-del="${idx}" class="wpDel danger">X</button>
-        </div>
+    html+=`
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+      <div>
+        <b>#${w.id}</b> ${w.total_km.toFixed(3)} km — ${w.text}
+        <span style="opacity:.5">${stat} ${dist} m</span>
       </div>
-    `;
+      <div>
+        <button class="primary" data-jump="${i}">Skok</button>
+        <button class="danger" data-del="${i}">X</button>
+      </div>
+    </div>`;
   });
 
-  box.innerHTML = html;
+  box.innerHTML=html;
 
-  // bind events
-  document.querySelectorAll(".wpJump").forEach(btn=>{
-    btn.onclick = ()=>{
-      let wp = waypoints[btn.dataset.wp];
-      total_m = wp.total_km*1000 - (lead_m+1);
-      partial_m = 0;
+  // Events
+  document.querySelectorAll("[data-jump]").forEach(b=>{
+    b.onclick=()=>{
+      let w=waypoints[b.dataset.jump];
+      total_m=w.total_km*1000-(lead_m+1);
+      partial_m=0;
       updateMeters();
     };
   });
 
-  document.querySelectorAll(".wpDel").forEach(btn=>{
-    btn.onclick = ()=>{
-      waypoints.splice(btn.dataset.del, 1);
+  document.querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick=()=>{
+      waypoints.splice(b.dataset.del,1);
       saveLocal();
-      renderWaypoints();
+      renderWpList();
       updateNextWaypoint();
     };
   });
 }
 
 
-// =========================
-//  UPDATE TOTAL/PARTIAL UI
-// =========================
-function updateMeters(){
-  $("total").textContent   = fmtKm(total_m);
-  $("partial").textContent = fmtKm(partial_m);
-  updateNextWaypoint();
-}
-
-
-// =========================
-//  LOCAL STORAGE
-//
-,Continue to DELO 3…
-</script>
-<script>
-// =========================
-// LOCAL STORAGE
-// =========================
-function saveLocal(){
-  localStorage.setItem("lead_m", lead_m);
-  localStorage.setItem("maxAcc", maxAcc);
-  localStorage.setItem("minStep", minStep);
-  localStorage.setItem("autoHide", autoHide);
-  localStorage.setItem("basis", basis);
-  localStorage.setItem("csv_url", currentCsvUrl);
-  localStorage.setItem("waypoints", JSON.stringify(waypoints));
-}
-
-function loadLocal(){
-  try {
-    lead_m  = Number(localStorage.getItem("lead_m"))  || 50;
-    maxAcc  = Number(localStorage.getItem("maxAcc"))  || 30;
-    minStep = Number(localStorage.getItem("minStep")) || 2;
-    autoHide = (Number(localStorage.getItem("autoHide"))||8)*1000;
-    basis = localStorage.getItem("basis") || "total";
-
-    const wp = JSON.parse(localStorage.getItem("waypoints")||"[]");
-    if (Array.isArray(wp)) waypoints = wp;
-  } catch(e){}
-}
-
-
-// =========================
-// CSV AUTO‑DISCOVERY
-// =========================
+// ----------------------------------------------------
+// DISCOVER CSV IN GITHUB REPO ROOT
+// ----------------------------------------------------
 async function discoverCsv(){
-  const api = `https://api.github.com/repos/${USER}/${REPO}/contents/`;
+  const api=`https://api.github.com/repos/${USER}/${REPO}/contents/`;
 
-  let resp = await fetch(api)
-    .then(r=>r.json())
-    .catch(()=>[]);
+  let resp=await fetch(api).then(r=>r.json()).catch(()=>[]);
+  let csvs=resp.filter(f=>f.name?.toLowerCase().endsWith(".csv")).map(f=>f.name);
 
-  let csvs = resp
-    .filter(f=>f?.name?.toLowerCase().endsWith(".csv"))
-    .map(f=>f.name);
-
-  const sel = $("csvSelect");
-
-  if (!csvs.length){
-    sel.innerHTML = `<option>(Ni CSV datotek)</option>`;
+  if(!csvs.length){
+    $("csvSelect").innerHTML="<option>(Ni CSV datotek)</option>";
     return;
   }
 
-  sel.innerHTML = csvs
-    .map(name => {
-      let u = location.origin + location.pathname.replace("index.html","") + name;
-      return `<option value="${u}">${name}</option>`;
-    })
-    .join("");
+  $("csvSelect").innerHTML=csvs.map(n=>{
+    let url=location.origin+location.pathname.replace("index.html","")+n;
+    return `<option value="${url}">${n}</option>`;
+  }).join("");
 
-  // Auto‑load if only one
-  if (csvs.length === 1){
-    let url = location.origin + location.pathname.replace("index.html","") + csvs[0];
-    currentCsvUrl = url;
+  if(csvs.length===1){
+    let url=location.origin+location.pathname.replace("index.html","")+csvs[0];
+    currentCsvUrl=url;
     await loadCsv(url);
   }
 }
 
 
-// =========================
-// LOAD CSV (URL / local file / auto)
-// =========================
+// ----------------------------------------------------
+// LOAD CSV SOURCES
+// ----------------------------------------------------
 async function loadCsv(url){
-  try {
-    const txt = await fetch(url, {cache:"no-store"}).then(r=>r.text());
-    currentCsvUrl = url;
-    localStorage.setItem("lastCsvText", txt);
+  try{
+    const text=await fetch(url,{cache:"no-store"}).then(r=>r.text());
+    currentCsvUrl=url;
+    localStorage.setItem("lastCsvText",text);
+    localStorage.setItem("csv_url",url);
 
-    waypoints = parseCsv(txt);
+    waypoints=parseCsv(text);
     saveLocal();
-    renderWaypoints();
+    renderWpList();
     updateNextWaypoint();
   }
-  catch(e){
-    showAlert("Napaka pri nalaganju CSV");
-  }
+  catch(e){ showAlert("Napaka pri CSV"); }
 }
 
 
-// =========================
+// ----------------------------------------------------
 // EXPORT CSV
-// =========================
+// ----------------------------------------------------
 function exportCsv(){
-  let out = "id,distance_km,text\n";
+  let out="id,distance_km,text\n";
   waypoints.forEach(w=>{
-    out += `${w.id},${w.total_km.toFixed(3)},"${w.text.replace(/"/g,'""')}"\n`;
+    out+=`${w.id},${w.total_km.toFixed(3)},"${w.text.replace(/"/g,'""')}"\n`;
   });
 
-  const blob = new Blob([out], {type:"text/csv"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "export_waypoints.csv";
+  const blob=new Blob([out],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="export_waypoints.csv";
   a.click();
 }
 
 
-// =========================
-// WAKE‑LOCK
-// =========================
-let wakeObj = null;
-
+// ----------------------------------------------------
+// WAKE LOCK
+// ----------------------------------------------------
+let wl=null;
 async function toggleWakeLock(){
-  try {
-    if (!wakeObj){
-      wakeObj = await navigator.wakeLock.request("screen");
-      $("btnWakeLock").textContent = "🔒 ON";
-      wakeObj.addEventListener("release", ()=>{ 
-        $("btnWakeLock").textContent = "🔆 OFF"; wakeObj=null;
+  try{
+    if(!wl){
+      wl=await navigator.wakeLock.request("screen");
+      $("btnWakeLock").textContent="🔒 ON";
+      wl.addEventListener("release",()=>{
+        $("btnWakeLock").textContent="🔆 OFF"; wl=null;
       });
     } else {
-      await wakeObj.release();
-      wakeObj = null;
-      $("btnWakeLock").textContent = "🔆 OFF";
+      await wl.release();
+      wl=null;
+      $("btnWakeLock").textContent="🔆 OFF";
     }
-  } catch(e){
-    showAlert("Wake‑lock ni podprt");
+  }catch(e){
+    showAlert("Wake‑Lock ni podprt");
   }
 }
 
 
-// =========================
-// BUTTON BINDINGS
-// =========================
-$("btnStart").onclick = ()=>{
-  measure = true;
-  partial_m = 0;
-  updateMeters();
-};
-
-$("btnStop").onclick = ()=>{ measure = false; };
-
-$("btnTotalReset").onclick = ()=>{
-  total_m = 0;
-  partial_m = 0;
-  waypoints.forEach(w=>{ w.alerted=false; w.passed=false; });
-  saveLocal();
-  updateMeters();
-};
-
-$("btnPartialReset").onclick = ()=>{
-  partial_m = 0;
-  updateMeters();
-};
-
-$("btnTotalMinus").onclick = ()=>{
-  total_m = Math.max(0, total_m - 10);
-  updateMeters();
-};
-
-$("btnTotalPlus").onclick = ()=>{
-  total_m += 10;
-  updateMeters();
-};
-
-$("btnPartialMinus").onclick = ()=>{
-  partial_m = Math.max(0, partial_m - 10);
-  updateMeters();
-};
-
-$("btnPartialPlus").onclick = ()=>{
-  partial_m += 10;
-  updateMeters();
-};
-
-$("btnSetTotal").onclick = ()=>{
-  let v = parseFloat($("setTotalInput").value.replace(",","."));
-  if (!isNaN(v)){
-    total_m = v*1000;
-    updateMeters();
-  }
-};
-
-
-// LOAD CSV – SELECTED
-$("btnLoadSelected").onclick = ()=>{
-  const url = $("csvSelect").value;
-  if (url) loadCsv(url);
-};
-
-// LOAD CSV – URL
-$("btnLoadUrl").onclick = ()=>{
-  const url = $("csvUrlInput").value.trim();
-  if (url) loadCsv(url);
-};
-
-// LOAD CSV – local file
-$("csvFileInput").onchange = async (e)=>{
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const txt = await file.text();
-  waypoints = parseCsv(txt);
-  saveLocal();
-  renderWaypoints();
-  updateNextWaypoint();
-};
-
-
-// ADD WAYPOINT @TOTAL
-$("btnAddWpHere").onclick = ()=>{
-  const txt = $("quickWpText").value.trim();
-  const id = waypoints.length ? (Number(waypoints[waypoints.length-1].id)+1) : 1;
-  waypoints.push({
-    id:id,
-    total_km: total_m/1000,
-    text:txt,
-    alerted:false,
-    passed:false
-  });
-  waypoints.sort((a,b)=>a.total_km-b.total_km);
-  saveLocal();
-  renderWaypoints();
-  updateNextWaypoint();
-  $("quickWpText").value = "";
-};
-
-// CLEAR WAYPOINTS
-$("btnClearWps").onclick = ()=>{
-  if (confirm("Res želiš odstraniti vse točke?")){
-    waypoints = [];
-    saveLocal();
-    renderWaypoints();
-    updateNextWaypoint();
-  }
-};
-
-// EXPORT CSV
-$("btnExportCsv").onclick = ()=> exportCsv();
-
-
-// SETTINGS INPUTS
-$("leadInput").onchange = e=>{
-  lead_m = Number(e.target.value)||50;
-  saveLocal();
-};
-
-$("maxAccInput").onchange = e=>{
-  maxAcc = Number(e.target.value)||30;
-  saveLocal();
-};
-
-$("minStepInput").onchange = e=>{
-  minStep = Number(e.target.value)||2;
-  saveLocal();
-};
-
-$("autoHideInput").onchange = e=>{
-  autoHide = (Number(e.target.value)||8)*1000;
-  saveLocal();
-};
-
-
-// =========================
+// ----------------------------------------------------
 // STARTUP INIT
-// =========================
-window.onload = async ()=>{
+// ----------------------------------------------------
+window.onload=async()=>{
 
-  // Load saved settings
-  loadLocal();
+  // load local settings + saved state
+  try{
+    lead_m = Number(localStorage.getItem("lead_m"))||50;
+    maxAcc = Number(localStorage.getItem("maxAcc"))||30;
+    minStep= Number(localStorage.getItem("minStep"))||2;
+    autoHide=(Number(localStorage.getItem("autoHide"))||8)*1000;
+    basis=localStorage.getItem("basis")||"total";
 
-  // Fill settings
-  $("leadInput").value = lead_m;
-  $("maxAccInput").value = maxAcc;
-  $("minStepInput").value = minStep;
-  $("autoHideInput").value = autoHide/1000;
+    let arr=JSON.parse(localStorage.getItem("waypoints")||"[]");
+    if(Array.isArray(arr)) waypoints=arr;
+  }catch(e){}
 
-  // Restore waypoints (if any)
-  renderWaypoints();
+  $("leadInput").value=lead_m;
+  $("maxAccInput").value=maxAcc;
+  $("minStepInput").value=minStep;
+  $("autoHideInput").value=autoHide/1000;
+
+  renderWpList();
   updateNextWaypoint();
 
-  // Start GPS immediately
+  // GPS begin instantly
   gpsInit();
 
-  // Autodiscover CSV in repo
+  // CSV autodiscovery
   await discoverCsv();
 
-  // Load ?csv= URL
-  const qp = new URLSearchParams(location.search).get("csv");
-  if (qp){
-    await loadCsv(qp);
-  }
+  // load ?csv=
+  let qp=new URLSearchParams(location.search).get("csv");
+  if(qp) await loadCsv(qp);
 
-  // Load last CSV if waypoints are empty
-  const lastTxt = localStorage.getItem("lastCsvText");
-  if (lastTxt && !waypoints.length){
-    waypoints = parseCsv(lastTxt);
-    renderWaypoints();
+  // load last CSV if needed
+  const last=localStorage.getItem("lastCsvText");
+  if(last && !waypoints.length){
+    waypoints=parseCsv(last);
+    renderWpList();
     updateNextWaypoint();
   }
+};
 
-  // Wakelock button now exists:
-  if (!$("btnWakeLockAdded")){
-    const btn = document.createElement("button");
-    btn.id = "btnWakeLock";
-    btn.textContent = "🔆 OFF";
-    btn.onclick = toggleWakeLock;
 
-    const partialCard = document.querySelector(".card:nth-child(2) .row");
-    partialCard.appendChild(btn);
+// ----------------------------------------------------
+// BUTTON EVENTS
+// ----------------------------------------------------
+$("btnStart").onclick = ()=>{ measure=true; partial_m=0; updateMeters(); };
+$("btnStop").onclick = ()=>{ measure=false; };
+
+$("btnTotalReset").onclick = ()=>{
+  total_m=0;partial_m=0;
+  waypoints.forEach(w=>{w.alerted=false;w.passed=false;});
+  saveLocal(); updateMeters();
+};
+
+$("btnPartialReset").onclick = ()=>{ partial_m=0; updateMeters(); };
+
+$("btnTotalMinus").onclick = ()=>{ total_m=Math.max(0,total_m-10); updateMeters(); };
+$("btnTotalPlus").onclick  = ()=>{ total_m+=10; updateMeters(); };
+$("btnPartialMinus").onclick=()=>{ partial_m=Math.max(0,partial_m-10);updateMeters(); };
+$("btnPartialPlus").onclick =()=>{ partial_m+=10; updateMeters(); };
+
+$("btnSetTotal").onclick=()=>{
+  let v=parseFloat($("setTotalInput").value.replace(",",".")); 
+  if(!isNaN(v)){ total_m=v*1000; updateMeters(); }
+};
+
+$("btnLoadSelected").onclick=()=>{ const url=$("csvSelect").value; if(url) loadCsv(url); };
+$("btnLoadUrl").onclick=()=>{ const url=$("csvUrlInput").value.trim(); if(url) loadCsv(url); };
+
+$("csvFileInput").onchange=async(e)=>{
+  const f=e.target.files?.[0]; if(!f)return;
+  const txt=await f.text();
+  waypoints=parseCsv(txt);
+  saveLocal();renderWpList();updateNextWaypoint();
+};
+
+$("btnAddWpHere").onclick=()=>{
+  let txt=$("quickWpText").value.trim();
+  let id=waypoints.length?(Number(waypoints[waypoints.length-1].id)+1):1;
+  waypoints.push({id:id,total_km:total_m/1000,text:txt,alerted:false,passed:false});
+  waypoints.sort((a,b)=>a.total_km-b.total_km);
+  saveLocal(); renderWpList(); updateNextWaypoint();
+  $("quickWpText").value="";
+};
+
+$("btnClearWps").onclick=()=>{
+  if(confirm("Res odstranim vse točke?")){
+    waypoints=[]; saveLocal(); renderWpList(); updateNextWaypoint();
   }
 };
+
+$("btnExportCsv").onclick=()=>exportCsv();
+
+$("btnWakeLock").onclick=()=>toggleWakeLock();
+
+$("leadInput").onchange=e=>{ lead_m=Number(e.target.value)||50; saveLocal(); };
+$("maxAccInput").onchange=e=>{ maxAcc=Number(e.target.value)||30; saveLocal(); };
+$("minStepInput").onchange=e=>{ minStep=Number(e.target.value)||2; saveLocal(); };
+$("autoHideInput").onchange=e=>{ autoHide=(Number(e.target.value)||8)*1000; saveLocal(); };
 </script>
 
 </body>
