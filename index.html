@@ -2,7 +2,7 @@
 <html lang="sl">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>TripM – Roadbook Trip Alerts</title>
 
 <style>
@@ -22,75 +22,42 @@ body{
   margin:10px;
 }
 .big{
-  font-size:2.35rem;
-  font-weight:700;
-  font-family:monospace;
+  font-size:2.4rem;
+  font-weight:800;
+  font-family:ui-monospace,monospace;
 }
-.label{
-  color:#a3b8d4;
-  font-size:.9rem;
-}
-.row{
-  display:flex;
-  gap:6px;
-  flex-wrap:wrap;
-  align-items:center;
-}
+.label{ color:#a3b8d4; font-size:.9rem; }
+.row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 button, input, select{
-  background:#0f1620;
-  color:#eaf2ff;
-  border:1px solid #2c3c50;
-  padding:8px 12px;
-  border-radius:10px;
-  font-size:1rem;
+  background:#0f1620; color:#eaf2ff;
+  border:1px solid #2c3c50; padding:10px 12px; border-radius:10px; font-size:1rem;
 }
 button{ cursor:pointer; }
 .primary{ background:#143247; border-color:#255a79; }
 .ok{ background:#0f2b22; border-color:#1c5b45; }
 .danger{ background:#3a1618; border-color:#6b2226; }
 .list{
-  max-height:220px;
-  overflow:auto;
-  border:1px dashed #203043;
-  padding:8px;
-  border-radius:10px;
+  max-height:220px; overflow:auto; border:1px dashed #203043; padding:8px; border-radius:10px;
 }
 .alert{
-  position:fixed;
-  bottom:12px;
-  left:50%;
-  transform:translateX(-50%);
-  width:90%;
-  max-width:350px;
-  background:#0c1a25;
-  border:2px solid #ffd166;
-  border-radius:14px;
-  padding:10px;
-  display:none;
-  z-index:9999;
-  text-align:center;
+  position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
+  width:90%; max-width:350px; background:#0c1a25; border:2px solid #ffd166;
+  border-radius:14px; padding:10px; display:none; z-index:9999; text-align:center;
 }
-
-/* NOVO: Status/Log panel */
+/* Status grid */
+.kv{ display:grid; grid-template-columns: 140px 1fr; gap:6px 10px; }
+/* VEČJA START/STOP gumba */
+#startBtn, #stopBtn{ font-size:1.6rem; padding:18px 26px; }
+#startBtn.active{ background:#1d5a2b !important; border-color:#2e7d3d; box-shadow:0 0 0 2px rgba(46,125,61,.25); }
+#stopBtn.active{ background:#7a2222 !important; border-color:#a23a3a; box-shadow:0 0 0 2px rgba(162,58,58,.25); }
+/* Log panel */
 .log{
-  max-height:260px;
-  overflow:auto;
-  border:1px dashed #34465e;
-  background:#0f1620;
-  padding:8px;
-  border-radius:10px;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-size:.9rem;
-  line-height:1.35;
-  white-space:pre-wrap;
+  max-height:220px; overflow:auto; border:1px dashed #34465e; background:#0f1620;
+  padding:8px; border-radius:10px; font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:.9rem; line-height:1.35; white-space:pre-wrap;
 }
-.kv{
-  display:grid;
-  grid-template-columns: 130px 1fr;
-  gap:6px 10px;
-}
-.kv > div:nth-child(odd){ color:#a3b8d4; }
-.kv > div:nth-child(even){ color:#eaf2ff; }
+.pill{ background:#162235; border:1px solid #2b415d; border-radius:999px; padding:3px 8px; font-size:.8rem; }
+.btn-mini{ padding:6px 10px; font-size:.95rem; }
 </style>
 </head>
 
@@ -100,18 +67,20 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big">0.000</div>
+
   <div class="row">
-    <button id="tm">−0.010</button>
-    <button id="tp">+0.010</button>
-    <input id="setT" type="number" step="0.001" placeholder="12.345">
-    <button id="setTb" class="ok">Nastavi</button>
-    <button id="rT" class="danger">Reset TOTAL</button>
+    <button id="tm" class="btn-mini">−0.010</button>
+    <button id="tp" class="btn-mini">+0.010</button>
+    <input id="setT" type="number" step="0.001" placeholder="12.345" style="width:140px">
+    <button id="setTb" class="ok btn-mini">Nastavi</button>
+    <button id="rT" class="danger btn-mini">Reset TOTAL</button>
   </div>
 
   <div class="kv" style="margin-top:8px">
-    <div>GPS status:</div><div id="gpss">GPS inicializacija…</div>
+    <div>GPS status:</div><div id="gpss">Čakam GPS fix…</div>
     <div>Natančnost:</div><div id="acca">—</div>
     <div>Koordinate:</div><div id="coords">—</div>
+    <div>Merjenje:</div><div id="measureState">NE</div>
   </div>
 </div>
 
@@ -119,14 +88,17 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">PARTIAL (km)</div>
   <div id="partial" class="big">0.000</div>
+
   <div class="row">
-    <button id="pm">−0.010</button>
-    <button id="pp">+0.010</button>
-    <button id="rP" class="ok">Reset PARTIAL</button>
+    <button id="pm" class="btn-mini">−0.010</button>
+    <button id="pp" class="btn-mini">+0.010</button>
+    <button id="rP" class="ok btn-mini">Reset PARTIAL</button>
   </div>
-  <div class="row">
+
+  <div class="row" style="gap:12px">
     <button id="startBtn" class="primary">▶ START</button>
     <button id="stopBtn">⏸ STOP</button>
+    <button id="btnWake" title="Ne zakleni zaslona">🔆 Wake‑Lock</button>
   </div>
 </div>
 
@@ -141,22 +113,30 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">CSV datoteke (root)</div>
   <div class="row">
-    <select id="csvSel"></select>
-    <button id="loadSel" class="primary">Naloži</button>
+    <select id="csvSel" style="min-width:240px"></select>
+    <button id="loadSel" class="primary btn-mini">Naloži</button>
   </div>
-  <div class="row">
+  <div class="row" style="margin-top:6px">
     <input id="urlIn" type="url" placeholder="https://…/waypoints.csv" style="flex:1">
-    <button id="loadUrl">URL load</button>
+    <button id="loadUrl" class="btn-mini">URL load</button>
   </div>
 </div>
 
 <!-- ALERT SETTINGS -->
 <div class="card">
-  <div class="label">Opozorila</div>
-  <div class="row">
-    <label>Lead (m):</label><input id="lead" type="number" value="50" min="0" step="5" style="width:80px">
-    <label>MaxAcc (m):</label><input id="maxAcc" type="number" value="30" min="5" style="width:80px">
-    <label>MinStep (m):</label><input id="minStep" type="number" value="2" min="0" style="width:80px">
+  <div class="label">Opozorila & Lead</div>
+  <div class="row" style="gap:10px">
+    <span class="pill">Predopozorilo:</span>
+    <button class="btn-mini" data-lead="20">20 m</button>
+    <button class="btn-mini" data-lead="50">50 m</button>
+    <button class="btn-mini" data-lead="100">100 m</button>
+    <span class="pill">Lead (m)</span>
+    <input id="lead" type="number" value="50" min="0" step="5" style="width:90px">
+    <span class="pill">MaxAcc (m)</span>
+    <input id="maxAcc" type="number" value="30" min="1" step="1" style="width:90px">
+    <span class="pill">MinStep (m)</span>
+    <!-- zahtevano: default 0.3 m -->
+    <input id="minStep" type="number" value="0.3" min="0" step="0.1" style="width:90px">
   </div>
 </div>
 
@@ -166,15 +146,21 @@ button{ cursor:pointer; }
   <div id="wpList" class="list"></div>
   <div class="row">
     <input id="qTxt" type="text" placeholder="Opis" style="flex:1">
-    <button id="addHere" class="primary">Dodaj @TOTAL</button>
-    <button id="clr" class="danger">Počisti</button>
-    <button id="exp" class="ok">Izvozi CSV</button>
+    <button id="addHere" class="primary btn-mini">Dodaj @TOTAL</button>
+    <button id="clr" class="danger btn-mini">Počisti</button>
+    <button id="exp" class="ok btn-mini">Izvozi CSV</button>
   </div>
 </div>
 
-<!-- STATUS / LOG -->
+<!-- LOG -->
 <div class="card">
-  <div class="label">Status & Log (GPS/CSV/Waypoints)</div>
+  <div class="row" style="justify-content:space-between">
+    <div class="label">Status & Log</div>
+    <div class="row">
+      <label style="display:flex;align-items:center;gap:6px"><input id="logToggle" type="checkbox" checked> Log ON</label>
+      <span class="pill">max 20 vrstic</span>
+    </div>
+  </div>
   <div id="log" class="log"></div>
 </div>
 
@@ -184,29 +170,28 @@ button{ cursor:pointer; }
 </div>
 
 <script>
-/* =========================
-   GLOBALS
-   ========================= */
+/* ============ GLOBALS ============ */
 let watchId=null,last=null,total=0,partial=0,measure=false;
-let leadM=50, maxA=30, minS=2;
-let wps=[], autoHide=8000; // ms
+let leadM=50, maxA=30, minS=0.3; // zahtevano: 0.3 m
+let wps=[], autoHide=8000;
 const USER="avelus", REPO="TripM";
-const LOG_MAX=300;
+const LOG_MAX=20;  // zahtevano: samo zadnjih 20
+let loggingEnabled = true;
+let startTS = null, stopTS = null;
+let wakeLock = null;
 
 const $ = id => document.getElementById(id);
 const ts = () => new Date().toLocaleTimeString();
 
 /* ============ LOGGING ============ */
 function logStatus(msg){
-  const box = $('log');
-  const line = `[${ts()}] ${msg}`;
-  box.textContent += (box.textContent ? "\n" : "") + line;
-  // trim log
-  const lines = box.textContent.split("\n");
-  if(lines.length > LOG_MAX){
-    box.textContent = lines.slice(lines.length-LOG_MAX).join("\n");
-  }
-  // autoscroll
+  if(!loggingEnabled) return;
+  const box=$('log');
+  const line=`[${ts()}] ${msg}`;
+  const lines = (box.textContent? box.textContent.split("\\n") : []);
+  lines.push(line);
+  while(lines.length>LOG_MAX) lines.shift();
+  box.textContent = lines.join("\\n");
   box.scrollTop = box.scrollHeight;
 }
 
@@ -232,34 +217,37 @@ function nextWp(){
     $('nextL').textContent='Ni točk';
     return;
   }
-  let bestDist=Infinity, label='';
+  let best=null, bestD=Infinity;
   for(let w of wps){
     if(w.passed) continue;
-    let d = w.km*1000 - total;
-    if(d>0 && d<bestDist){
-      bestDist=d;
-      label = `#${w.id} @ ${w.km.toFixed(3)} km — ${w.txt}`;
-    }
+    const d = w.km*1000 - total;
+    if(d>0 && d<bestD){ bestD=d; best=w; }
   }
-  if(bestDist===Infinity){
+  if(!best){
     $('nextD').textContent='— m';
     $('nextL').textContent='Ni več točk';
     return;
   }
-  $('nextD').textContent = Math.round(bestDist)+" m";
-  $('nextL').textContent = label;
+  $('nextD').textContent = Math.round(bestD) + ' m';
+  $('nextL').textContent = `#${best.id} @ ${best.km.toFixed(3)} km — ${best.txt||''}`;
 }
 
-/* ============ ALERT (bottom-fixed) ============ */
+/* ============ ALERT (ENA FAZA) ============ */
 function showAlert(msg){
   $('amsg').textContent = msg || 'Opozorilo';
-  const a = $('alert');
+  const a=$('alert');
   a.style.display='block';
   clearTimeout(showAlert._t);
   showAlert._t = setTimeout(()=>a.style.display='none', autoHide);
 }
-
-/* ============ AUDIO + VIBRA + TTS ============ */
+function doBeepVibrateTts(id, text){
+  // močan beep → vibracija → TTS
+  beep(950,200); setTimeout(()=>beep(700,180), 240);
+  if(navigator.vibrate) navigator.vibrate(250);
+  const line = `#${id}${text?': '+text:''}`;
+  showAlert(line);
+  say(text || `Točka ${id}`);
+}
 function beep(freq=880,ms=180){
   try{
     const C=window.AudioContext||window.webkitAudioContext;
@@ -269,7 +257,6 @@ function beep(freq=880,ms=180){
     setTimeout(()=>{o.stop();ctx.close();},ms);
   }catch(e){}
 }
-function vibrate(ms=250){ if(navigator.vibrate) navigator.vibrate(ms); }
 function say(txt){
   try{
     const u=new SpeechSynthesisUtterance(txt||'Pozor!');
@@ -277,7 +264,15 @@ function say(txt){
   }catch(e){}
 }
 
-/* ============ CSV LOGIC ============ */
+/* ============ GPS STATUS ============ */
+function updateGpsStatus(acc){
+  if(!last){ $('gpss').textContent = 'Čakam GPS fix…'; return; }
+  if(typeof acc==='number'){
+    $('gpss').textContent = (acc<=maxA) ? `Signal OK (${Math.round(acc)} m)` : `Slab signal (${Math.round(acc)} m)`;
+  }
+}
+
+/* ============ CSV LOGIC (TOTAL ali PARTIAL) ============ */
 async function loadCsv(url){
   logStatus(`CSV: nalagam ${url}`);
   const res = await fetch(url,{cache:'no-store'});
@@ -286,7 +281,7 @@ async function loadCsv(url){
   localStorage.csv_url = url;
   localStorage.lastCsv = txt;
   parseCsvIntoWps(txt);
-  render();
+  renderWps();
   logStatus(`CSV: naloženo ${wps.length} točk`);
 }
 function parseCsvIntoWps(txt){
@@ -302,13 +297,13 @@ function parseCsvIntoWps(txt){
   const iTxt = cols.findIndex(c=>['text','opis','note','desc'].includes(c));
 
   let arr=[], cum=0, usedBasis = (iPar>=0 && iTot<0) ? 'partial' : 'total';
-  logStatus(`CSV: zaznan basis = ${usedBasis}`);
+  logStatus(`CSV: basis=${usedBasis}`);
 
   for(let i=1;i<rows.length;i++){
-    const a = rows[i].split(delim).map(s=>s.trim());
+    const a=rows[i].split(delim).map(s=>s.trim());
     if(!a.length) continue;
-    const id  = iId>=0 ? a[iId] : i;
-    const txt = iTxt>=0 ? a[iTxt] : '';
+    const id  = iId>=0? a[iId] : i;
+    const txt = iTxt>=0? a[iTxt] : '';
     let km = NaN;
 
     if(usedBasis==='total' && iTot>=0){
@@ -319,14 +314,11 @@ function parseCsvIntoWps(txt){
       km = cum;
     }
     if(isNaN(km)) continue;
-
     arr.push({ id, km, txt, alerted:false, passed:false });
   }
   wps = arr.sort((a,b)=>a.km-b.km);
 }
-
-/* ============ RENDER WP LIST ============ */
-function render(){
+function renderWps(){
   let H='';
   for(let i=0;i<wps.length;i++){
     const w = wps[i];
@@ -334,12 +326,12 @@ function render(){
     const state = w.passed ? '✔️' : (w.alerted ? '⚠️' : '');
     H += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
             <div>
-              <b>#${w.id}</b> ${w.km.toFixed(3)} km — ${w.txt}
+              <b>#${w.id}</b> ${w.km.toFixed(3)} km — ${w.txt||''}
               <span style="opacity:.6">${state} ${dist>0?dist+' m':''}</span>
             </div>
             <div>
-              <button class="primary" data-jump="${i}">Skok</button>
-              <button class="danger"  data-del="${i}">X</button>
+              <button class="primary btn-mini" data-jump="${i}">Skok</button>
+              <button class="danger btn-mini"  data-del="${i}">X</button>
             </div>
           </div>`;
   }
@@ -350,49 +342,42 @@ function render(){
       const w = wps[b.dataset.jump];
       total = w.km*1000 - (leadM+1);
       partial = 0;
-      update();
-      logStatus(`WP: Skok na #${w.id}, set TOTAL≈${fmt(total)} km`);
+      update(); logStatus(`WP: Skok na #${w.id}`);
     };
   });
   document.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick = ()=>{
-      const w = wps[b.dataset.del];
-      logStatus(`WP: brisanje #${w.id}`);
+      const w=wps[b.dataset.del];
       wps.splice(b.dataset.del,1);
-      render(); nextWp();
+      renderWps(); nextWp(); logStatus(`WP: brisan #${w.id}`);
     };
   });
 
   nextWp();
 }
 
-/* ============ GPS INIT: pre-warm + watch ON LOAD ============ */
+/* ============ GPS INIT (pre-warm + watch ON LOAD) ============ */
 function gpsInit(){
   if(!navigator.geolocation){
     $('gpss').textContent='Ni GPS podpore';
     logStatus('GPS: ni podpore v brskalniku');
     return;
   }
-  // 1) Pre-warm
+  // pre-warm
   navigator.geolocation.getCurrentPosition(
-    p=>{
-      $('gpss').textContent='GPS dovoljenje OK, ogrevam…';
-      logStatus(`GPS pre-warm OK @ acc≈${Math.round(p.coords.accuracy)} m`);
-    },
-    e=>{
-      $('gpss').textContent='GPS: dovoli lokacijo!';
-      logStatus(`GPS pre-warm ERR: ${e.message||e.code}`);
-    },
+    p=>{ $('gpss').textContent='GPS dovoljenje OK, ogrevam…'; logStatus(`GPS pre-warm OK (acc≈${Math.round(p.coords.accuracy)} m)`); },
+    e=>{ $('gpss').textContent='GPS: dovoli lokacijo!'; logStatus(`GPS pre-warm ERR: ${e.message||e.code}`); },
     { enableHighAccuracy:true, timeout:5000 }
   );
 
-  // 2) watchPosition
+  // watch
   watchId = navigator.geolocation.watchPosition(pos=>{
-    const acc = pos.coords.accuracy;
-    $('acca').textContent = "Natančnost: " + Math.round(acc) + " m";
-    $('coords').textContent = pos.coords.latitude.toFixed(6) + ", " + pos.coords.longitude.toFixed(6);
+    const acc=pos.coords.accuracy;
+    $('acca').textContent = Math.round(acc)+' m';
+    $('coords').textContent = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6);
 
-    const now = {lat:pos.coords.latitude, lon:pos.coords.longitude};
+    const now={lat:pos.coords.latitude, lon:pos.coords.longitude};
+    updateGpsStatus(acc);
 
     if(acc <= maxA){
       if(last){
@@ -403,17 +388,17 @@ function gpsInit(){
             partial += d;
             update();
             checkWP();
-            logStatus(`GPS Δ=${d.toFixed(1)} m, TOTAL=${fmt(total)} km (acc=${Math.round(acc)} m)`);
+            logStatus(`Δ=${d.toFixed(2)} m → TOTAL=${fmt(total)} km`);
           }else{
-            logStatus(`GPS Δ=${d.toFixed(1)} m ignorirano (measure=${measure}, minStep=${minS} m)`);
+            logStatus(`Δ=${d.toFixed(2)} m ignorirano (measure=${measure}, minStep=${minS} m)`);
           }
         }
       }else{
-        logStatus('GPS prvi fix OK (acc='+Math.round(acc)+' m)');
+        logStatus(`Prvi fix OK (acc=${Math.round(acc)} m)`);
       }
       last = now;
     }else{
-      logStatus(`GPS točka ignorirana (acc=${Math.round(acc)} m > maxAcc=${maxA} m)`);
+      logStatus(`Točka ignorirana (acc=${Math.round(acc)} m > maxAcc=${maxA} m)`);
     }
   }, err=>{
     $('gpss').textContent="GPS napaka";
@@ -424,22 +409,19 @@ function gpsInit(){
   logStatus('GPS watch zagnan');
 }
 
-/* ============ WAYPOINT ALERTS ============ */
+/* ============ WAYPOINT ALERT (ENA FAZA) ============ */
 function checkWP(){
   for(let w of wps){
     if(w.passed) continue;
     const d = w.km*1000 - total;
+
+    // Eno opozorilo – na leadM pred točko
     if(!w.alerted && d <= leadM && d > 0){
       w.alerted = true;
-      beep(880,180); setTimeout(()=>beep(660,180),220);
-      vibrate(200); say(w.txt||`Točka ${w.id}`);
-      showAlert(w.txt || `Točka ${w.id}`);
-      logStatus(`ALERT #${w.id} @ ${w.km.toFixed(3)} km (${w.txt||''})`);
+      doBeepVibrateTts(w.id, w.txt||`Točka ${w.id}`);
+      logStatus(`ALERT #${w.id} @ ${w.km.toFixed(3)} km`);
     }
-    if(!w.passed && d <= 0){
-      w.passed = true;
-      logStatus(`PASS #${w.id}`);
-    }
+    if(!w.passed && d <= 0){ w.passed = true; }
   }
 }
 
@@ -458,42 +440,60 @@ async function discoverCsv(){
     const u = location.origin + location.pathname.replace('index.html','') + n;
     return `<option value="${u}">${n}</option>`;
   }).join('');
-  logStatus(`CSV discover: najdenih ${csvs.length} datotek`);
+  logStatus(`CSV discover: ${csvs.length} datotek`);
   if(csvs.length===1){
     const url = location.origin + location.pathname.replace('index.html','') + csvs[0];
     await loadCsv(url);
   }
 }
 
-/* ============ ON LOAD ============ */
+/* ============ INIT ON LOAD ============ */
 window.addEventListener('load', async ()=>{
   // restore settings
   try{
-    const lm = Number(localStorage.getItem('lead_m')); if(!isNaN(lm)) leadM=lm;
-    const ma = Number(localStorage.getItem('maxAcc')); if(!isNaN(ma)) maxA=ma;
-    const ms = Number(localStorage.getItem('minStep'));if(!isNaN(ms)) minS=ms;
+    const lm=Number(localStorage.getItem('lead_m'));  if(!isNaN(lm)) leadM=lm;
+    const ma=Number(localStorage.getItem('maxAcc'));  if(!isNaN(ma)) maxA=ma;
+    const ms=Number(localStorage.getItem('minStep')); if(!isNaN(ms)) minS=ms;
     const lastTxt = localStorage.getItem('lastCsv') || localStorage.getItem('lastCsvText');
-    if(lastTxt){ parseCsvIntoWps(lastTxt); }
+    if(lastTxt) parseCsvIntoWps(lastTxt);
   }catch(e){}
+  renderWps(); nextWp();
 
-  render(); nextWp();
-  gpsInit();                 // << takoj po zagonu
-  await discoverCsv();       // auto seznam CSV
+  // GPS takoj ob zagonu
+  gpsInit();
+
+  // CSV autodiscovery
+  await discoverCsv();
 
   // ?csv=…
   const qp = new URLSearchParams(location.search).get('csv');
   if(qp){ await loadCsv(qp); }
 
-  // last used CSV, če nič še ni
+  // last CSV
   const lc = localStorage.getItem('csv_url');
   if(lc && !wps.length){ await loadCsv(lc); }
 });
 
 /* ============ BUTTONS ============ */
-$('startBtn').onclick = ()=>{ measure=true; partial=0; update(); logStatus('MEASURE=ON'); };
-$('stopBtn').onclick  = ()=>{ measure=false; logStatus('MEASURE=OFF'); };
+$('startBtn').onclick = ()=>{
+  measure = true;
+  startTS = new Date();
+  partial = 0; update();
+  $('startBtn').classList.add('active');
+  $('stopBtn').classList.remove('active');
+  $('measureState').textContent = `DA (${startTS.toLocaleTimeString()})`;
+  logStatus('MEASURE=ON (START)');
+};
+$('stopBtn').onclick = ()=>{
+  measure = false;
+  stopTS = new Date();
+  $('stopBtn').classList.add('active');
+  $('startBtn').classList.remove('active');
+  $('measureState').textContent = `NE (${stopTS.toLocaleTimeString()})`;
+  logStatus('MEASURE=OFF (STOP)');
+};
 
-$('rT').onclick = ()=>{ total=0; partial=0; wps.forEach(w=>{w.alerted=false;w.passed=false;}); update(); logStatus('TOTAL reset + WP state reset'); };
+$('rT').onclick = ()=>{ total=0; partial=0; wps.forEach(w=>{w.alerted=false;w.passed=false;}); update(); logStatus('TOTAL reset + WP reset'); };
 $('rP').onclick = ()=>{ partial=0; update(); logStatus('PARTIAL reset'); };
 
 $('tm').onclick = ()=>{ total=Math.max(0,total-10); update(); logStatus('TOTAL −0.010 km'); };
@@ -502,32 +502,57 @@ $('pm').onclick = ()=>{ partial=Math.max(0,partial-10); update(); logStatus('PAR
 $('pp').onclick = ()=>{ partial+=10; update(); logStatus('PARTIAL +0.010 km'); };
 
 $('setTb').onclick = ()=>{
-  const v = parseFloat(String($('setT').value).replace(',','.'));
-  if(!isNaN(v)){ total = Math.max(0, v*1000); update(); logStatus('TOTAL set to '+fmt(total)+' km'); }
+  const v=parseFloat(String($('setT').value).replace(',','.'));
+  if(!isNaN(v)){ total=Math.max(0, v*1000); update(); logStatus('TOTAL = '+fmt(total)+' km'); }
 };
 
-$('loadSel').onclick = ()=>{ const u = $('csvSel').value; if(u) loadCsv(u); };
-$('loadUrl').onclick  = ()=>{ const u = $('urlIn').value.trim(); if(u) loadCsv(u); };
+document.querySelectorAll('[data-lead]').forEach(b=>{
+  b.onclick = ()=>{ leadM = Number(b.dataset.lead)||leadM; $('lead').value = leadM; localStorage.setItem('lead_m', leadM); logStatus('Lead='+leadM+' m'); };
+});
+
+$('lead').onchange   = e=>{ leadM = Number(e.target.value)||50; localStorage.setItem('lead_m',leadM); logStatus('Lead='+leadM+' m'); };
+$('maxAcc').onchange = e=>{ maxA  = Number(e.target.value)||30; localStorage.setItem('maxAcc',maxA); logStatus('MaxAcc='+maxA+' m'); };
+$('minStep').onchange= e=>{ minS  = Number(e.target.value)||0.3; localStorage.setItem('minStep',minS); logStatus('MinStep='+minS+' m'); };
+
+$('loadSel').onclick = ()=>{ const u=$('csvSel').value; if(u) loadCsv(u); };
+$('loadUrl').onclick = ()=>{ const u=$('urlIn').value.trim(); if(u) loadCsv(u); };
 
 $('addHere').onclick = ()=>{
-  const txt = $('qTxt').value.trim();
-  const id = wps.length ? (Number(wps[wps.length-1].id)||0)+1 : 1;
+  const txt=$('qTxt').value.trim();
+  const id = wps.length? (Number(wps[wps.length-1].id)||0)+1 : 1;
   wps.push({ id, km: total/1000, txt, alerted:false, passed:false });
-  wps.sort((a,b)=>a.km-b.km);
-  render(); nextWp(); $('qTxt').value='';
+  wps.sort((a,b)=>a.km-b.km); renderWps(); nextWp(); $('qTxt').value='';
   logStatus(`WP add #${id} @ ${fmt(total)} km`);
 };
-$('clr').onclick = ()=>{ if(confirm('Počisti vse točke?')){ wps=[]; render(); nextWp(); logStatus('WP list cleared'); } };
+$('clr').onclick = ()=>{ if(confirm('Počisti vse točke?')){ wps=[]; renderWps(); nextWp(); logStatus('WP list cleared'); } };
 $('exp').onclick = ()=>{
-  let S='id,distance_km,text\n'; wps.forEach(w=>{ S+=`${w.id},${w.km.toFixed(3)},"${w.txt.replace(/"/g,'""')}"\n`; });
+  let S='id,distance_km,text\n'; wps.forEach(w=>{ S+=`${w.id},${w.km.toFixed(3)},"${(w.txt||'').replace(/"/g,'""')}"\n`; });
   const B=new Blob([S],{type:'text/csv'}); const a=document.createElement('a');
-  a.href=URL.createObjectURL(B); a.download='export.csv'; a.click();
-  logStatus('CSV export');
+  a.href=URL.createObjectURL(B); a.download='export.csv'; a.click(); logStatus('CSV export');
 };
 
-$('lead').onchange   = e=>{ leadM = parseFloat(e.target.value)||50; localStorage.setItem('lead_m',leadM); logStatus('Lead='+leadM+' m'); };
-$('maxAcc').onchange = e=>{ maxA  = parseFloat(e.target.value)||30; localStorage.setItem('maxAcc',maxA); logStatus('MaxAcc='+maxA+' m'); };
-$('minStep').onchange= e=>{ minS  = parseFloat(e.target.value)||2;  localStorage.setItem('minStep',minS); logStatus('MinStep='+minS+' m'); };
+$('logToggle').onchange = e=>{
+  loggingEnabled = e.target.checked;
+  logStatus('Log '+(loggingEnabled?'ON':'OFF'));
+  if(!loggingEnabled){ $('log').textContent=''; }
+};
+
+/* Wake-Lock */
+$('btnWake').onclick = async ()=>{
+  try{
+    if(!('wakeLock' in navigator)){ showAlert('Wake‑Lock ni podprt'); return; }
+    if(!wakeLock){
+      wakeLock = await navigator.wakeLock.request('screen');
+      $('btnWake').textContent='🔒 Wake‑Lock ON';
+      wakeLock.addEventListener('release', ()=>{ $('btnWake').textContent='🔆 Wake‑Lock'; wakeLock=null; });
+    }else{
+      await wakeLock.release(); wakeLock=null; $('btnWake').textContent='🔆 Wake‑Lock';
+    }
+  }catch(e){ showAlert('Wake‑Lock: napaka'); }
+};
+
+/* Helper: initial render */
+function renderWps(){ /* alias za združljivost — že generira v parseCsvIntoWps */ }
 </script>
 
 </body>
