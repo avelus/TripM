@@ -11,7 +11,6 @@ body{
   background:#0b0f14;
   color:#eaf2ff;
   font-family:system-ui,Arial;
-  -webkit-user-select:none;
   user-select:none;
 }
 .card{
@@ -28,27 +27,54 @@ body{
 }
 .label{ color:#a3b8d4; font-size:.9rem; }
 .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-button, input{
-  background:#0f1620; color:#eaf2ff;
-  border:1px solid #2c3c50; padding:10px 12px; border-radius:10px; font-size:1rem;
+
+button,input{
+  background:#0f1620;
+  color:#eaf2ff;
+  border:1px solid #2c3c50;
+  padding:10px 12px;
+  border-radius:10px;
+  font-size:1rem;
 }
 button{ cursor:pointer; }
+
 .primary{ background:#143247; border-color:#255a79; }
 .ok{ background:#0f2b22; border-color:#1c5b45; }
 .danger{ background:#3a1618; border-color:#6b2226; }
-.alert{
-  position:fixed; bottom:12px; left:50%; transform:translateX(-50%);
-  width:90%; max-width:360px; background:#0c1a25; border:2px solid #ffd166;
-  border-radius:14px; padding:12px; display:none; z-index:9999; text-align:center;
+
+.bigAdd{
+  font-size:1.4rem;
+  padding:16px 28px;
 }
+
+.alert{
+  position:fixed;
+  bottom:12px;
+  left:50%;
+  transform:translateX(-50%);
+  width:90%;
+  max-width:360px;
+  background:#0c1a25;
+  border:2px solid #ffd166;
+  border-radius:14px;
+  padding:12px;
+  display:none;
+  z-index:9999;
+  text-align:center;
+}
+
 .log{
-  max-height:200px; overflow:auto;
-  border:1px dashed #34465e; background:#0f1620;
-  padding:8px; border-radius:10px;
+  max-height:200px;
+  overflow:auto;
+  border:1px dashed #34465e;
+  background:#0f1620;
+  padding:8px;
+  border-radius:10px;
   font-family:ui-monospace,monospace;
   font-size:.9rem;
   white-space:pre-wrap;
 }
+
 #startBtn,#stopBtn{ font-size:1.6rem; padding:18px 26px; }
 #startBtn.active{ background:#1d5a2b; }
 #stopBtn.active{ background:#7a2222; }
@@ -61,9 +87,12 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big">0.000</div>
+
+  <div class="label">GPS status</div>
+  <div id="gpss">Čakam GPS…</div>
 </div>
 
-<!-- PARTIAL -->
+<!-- PARTIAL + CONTROL -->
 <div class="card">
   <div class="label">PARTIAL (km)</div>
   <div id="partial" class="big">0.000</div>
@@ -75,17 +104,28 @@ button{ cursor:pointer; }
   </div>
 </div>
 
-<!-- MANUAL ALERT -->
+<!-- ALERT ENTRY -->
 <div class="card">
-  <div class="label">Dodaj opozorilo (med vožnjo)</div>
+  <div class="label">Ročni vnos opozoril (med vožnjo)</div>
+
   <div class="row">
-    <input id="alertDist" type="number" min="1" placeholder="Čez (m)" style="width:120px">
-    <input id="alertTxt" type="text" placeholder="Besedilo opozorila" style="flex:1">
-    <button id="addAlert" class="primary">➕ Dodaj</button>
+    <input id="alertDist" type="number" min="1"
+           placeholder="Čez (m)" style="width:120px">
+
+    <input id="alertTxt" type="text"
+           placeholder="Besedilo opozorila" style="flex:1">
   </div>
-  <div class="label" style="margin-top:6px">
-    Predopozorilo (Lead):
-    <input id="lead" type="number" value="50" step="5" style="width:80px"> m
+
+  <div class="row" style="margin-top:10px">
+    <button id="addAlert" class="primary bigAdd">➕ DODAJ OPOZORILO</button>
+  </div>
+
+  <div class="row" style="margin-top:10px">
+    <span class="label">Predopozorilo:</span>
+    <button data-lead="50">50 m</button>
+    <button data-lead="100">100 m</button>
+    <button data-lead="200">200 m</button>
+    <span class="label">Lead = <span id="leadVal">50</span> m</span>
   </div>
 </div>
 
@@ -101,41 +141,46 @@ button{ cursor:pointer; }
 </div>
 
 <script>
-let total=0, partial=0, last=null, measure=false;
+/* ===== GLOBALS ===== */
+let total=0, partial=0;
+let last=null, measure=false;
 let leadM=50, maxAcc=30, minStep=0.3;
 let wps=[];
-let watchId=null, wakeLock=null;
+let wakeLock=null;
 const LOG_MAX=20;
 
 const $=id=>document.getElementById(id);
 const fmt=m=>(m/1000).toFixed(3);
 
+/* ===== LOG ===== */
 function log(msg){
   const box=$('log');
-  const lines=box.textContent.split("\n").filter(l=>l);
+  const lines=box.textContent.split('\n').filter(l=>l);
   lines.push(msg);
   while(lines.length>LOG_MAX) lines.shift();
-  box.textContent=lines.join("\n");
+  box.textContent=lines.join('\n');
   box.scrollTop=box.scrollHeight;
 }
 
+/* ===== ALERT UI ===== */
 function showAlert(txt){
   $('amsg').textContent=txt;
   $('alert').style.display='block';
-  setTimeout(()=>$('alert').style.display='none',6000);
+  clearTimeout(showAlert.t);
+  showAlert.t=setTimeout(()=> $('alert').style.display='none',7000);
 }
 
-function beep(f=800,m=200){
+/* ===== SOUND ===== */
+function beep(f=800,m=180){
   try{
-    const a=new AudioContext();
-    const o=a.createOscillator();
+    const c=new AudioContext();
+    const o=c.createOscillator();
     o.frequency.value=f;
-    o.connect(a.destination);
+    o.connect(c.destination);
     o.start();
-    setTimeout(()=>{o.stop();a.close();},m);
+    setTimeout(()=>{o.stop();c.close();},m);
   }catch{}
 }
-
 function say(txt){
   try{
     const u=new SpeechSynthesisUtterance(txt);
@@ -145,6 +190,7 @@ function say(txt){
   }catch{}
 }
 
+/* ===== WAYPOINT CHECK ===== */
 function checkWP(){
   for(const w of wps){
     if(w.passed) continue;
@@ -153,29 +199,31 @@ function checkWP(){
     if(!w.pre && d<=leadM && d>0){
       w.pre=true;
       beep(600,120);
-      showAlert("Kmalu: "+w.txt);
-      log("PRE: "+w.txt);
+      showAlert(`Kmalu: ${w.txt}`);
+      log(`PRE ${w.txt} (${Math.round(d)}m)`);
     }
 
     if(!w.alert && d<=0){
       w.alert=true;
       w.passed=true;
-      beep(900,200);
+      beep(950,220);
       navigator.vibrate?.(250);
       say(w.txt);
       showAlert(w.txt);
-      log("ALERT: "+w.txt);
+      log(`ALERT ${w.txt}`);
     }
   }
 }
 
+/* ===== GPS ===== */
 navigator.geolocation.watchPosition(p=>{
   const acc=p.coords.accuracy;
+  $('gpss').textContent=`GPS acc ${Math.round(acc)} m`;
   if(acc>maxAcc) return;
 
   const now={lat:p.coords.latitude,lon:p.coords.longitude};
   if(last){
-    const R=6371000,rad=d=>d*Math.PI/180;
+    const R=6371000,rad=x=>x*Math.PI/180;
     const d=Math.acos(
       Math.sin(rad(last.lat))*Math.sin(rad(now.lat))+
       Math.cos(rad(last.lat))*Math.cos(rad(now.lat))*Math.cos(rad(now.lon-last.lon))
@@ -191,43 +239,58 @@ navigator.geolocation.watchPosition(p=>{
   last=now;
 },{},{enableHighAccuracy:true});
 
+/* ===== BUTTONS ===== */
 $('startBtn').onclick=()=>{
   measure=true;
   partial=0;
   $('startBtn').classList.add('active');
   $('stopBtn').classList.remove('active');
-  log("START");
+  log('START');
 };
 
 $('stopBtn').onclick=()=>{
   measure=false;
   $('stopBtn').classList.add('active');
   $('startBtn').classList.remove('active');
-  log("STOP");
+  log('STOP');
 };
 
 $('addAlert').onclick=()=>{
-  if(!measure) return showAlert("Najprej START");
+  if(!measure) return showAlert('Najprej START');
   const d=Number($('alertDist').value);
-  if(!d||d<=0) return;
-  const txt=$('alertTxt').value||`Opozorilo čez ${d} m`;
-  wps.push({km:(total+d)/1000,txt,pre:false,alert:false,passed:false});
-  showAlert("Dodano");
-  log("ADD "+txt);
-  $('alertDist').value='';$('alertTxt').value='';
+  if(!d||d<=0) return showAlert('Napačna razdalja');
+
+  const txt=$('alertTxt').value || `Opozorilo čez ${d} m`;
+  wps.push({
+    km:(total+d)/1000,
+    txt, pre:false, alert:false, passed:false
+  });
+  showAlert('Opozorilo dodano');
+  log(`ADD ${txt} (${d}m)`);
+  $('alertDist').value='';
+  $('alertTxt').value='';
 };
 
-$('lead').onchange=e=>leadM=Number(e.target.value)||50;
+document.querySelectorAll('[data-lead]').forEach(b=>{
+  b.onclick=()=>{
+    leadM=Number(b.dataset.lead);
+    $('leadVal').textContent=leadM;
+    log(`Lead=${leadM}m`);
+  };
+});
 
+/* ===== WAKELOCK ===== */
 $('btnWake').onclick=async()=>{
-  if(!wakeLock){
-    wakeLock=await navigator.wakeLock?.request('screen');
-    $('btnWake').textContent='🔒 Wake‑Lock';
-  }else{
-    await wakeLock.release();
-    wakeLock=null;
-    $('btnWake').textContent='🔆 Wake‑Lock';
-  }
+  try{
+    if(!wakeLock){
+      wakeLock=await navigator.wakeLock.request('screen');
+      $('btnWake').textContent='🔒 Wake‑Lock';
+    }else{
+      await wakeLock.release();
+      wakeLock=null;
+      $('btnWake').textContent='🔆 Wake‑Lock';
+    }
+  }catch{}
 };
 </script>
 </body>
