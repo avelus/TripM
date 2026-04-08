@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Manual Alerts PRO</title>
+<title>TripM – Manual Alerts (Final)</title>
 
 <style>
 body{
@@ -34,10 +34,20 @@ button,input{
   border:1px solid #2c3c50;
   padding:10px 12px;
   border-radius:10px;
+  font-size:1rem;
 }
 button{ cursor:pointer; }
-.primary{ background:#143247; }
+
+.primary{ background:#143247; border-color:#255a79; }
 .bigAdd{ font-size:1.4rem; padding:16px 28px; }
+
+.list{
+  max-height:220px;
+  overflow:auto;
+  border:1px dashed #203043;
+  padding:8px;
+  border-radius:10px;
+}
 
 .alert{
   position:fixed;
@@ -52,14 +62,6 @@ button{ cursor:pointer; }
   z-index:9999;
 }
 
-.list{
-  max-height:220px;
-  overflow:auto;
-  border:1px dashed #203043;
-  padding:8px;
-  border-radius:10px;
-}
-
 .log{
   max-height:180px;
   overflow:auto;
@@ -70,6 +72,7 @@ button{ cursor:pointer; }
   font-family:ui-monospace,monospace;
   font-size:.85rem;
 }
+
 #startBtn,#stopBtn{font-size:1.6rem;padding:18px 26px;}
 #startBtn.active{background:#1d5a2b;}
 #stopBtn.active{background:#7a2222;}
@@ -98,16 +101,16 @@ button{ cursor:pointer; }
 
 <!-- ADD ALERT -->
 <div class="card">
-  <div class="label">Dodaj opozorilo</div>
+  <div class="label">Dodaj opozorilo (TOTAL)</div>
   <div class="row">
     <input id="alertDist" type="number" min="1" placeholder="Čez (m)" style="width:120px">
     <input id="alertTxt" type="text" placeholder="Besedilo" style="flex:1">
   </div>
   <div class="row" style="margin-top:10px">
-    <button id="addAlert" class="primary bigAdd">➕ DODAJ</button>
+    <button id="addAlert" class="primary bigAdd">➕ DODAJ OPOZORILO</button>
   </div>
   <div class="label" style="margin-top:6px">
-    Predopozorilo: <b>100 m</b>
+    Predopozorilo: <b>100 m (globalno)</b>
   </div>
 </div>
 
@@ -123,12 +126,13 @@ button{ cursor:pointer; }
   <div id="log" class="log"></div>
 </div>
 
+<!-- POPUP -->
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
 /* ===== GLOBALS ===== */
 let total=0,partial=0,last=null,measure=false;
-let leadM=100;               // ✅ DEFAULT 100 m
+let leadM=100;       // ✅ default predopozorilo
 let minStep=0.3,maxAcc=30;
 let wps=[];
 let wakeLock=null;
@@ -143,11 +147,12 @@ function log(m){
   box.scrollTop=box.scrollHeight;
 }
 
-/* ===== UI ===== */
+/* ===== ALERT UI ===== */
 function showAlert(t){
   $('amsg').textContent=t;
   $('alert').style.display='block';
-  setTimeout(()=>$('alert').style.display='none',6000);
+  clearTimeout(showAlert.t);
+  showAlert.t=setTimeout(()=> $('alert').style.display='none',6000);
 }
 
 /* ===== SOUND ===== */
@@ -165,7 +170,7 @@ function say(t){
   speechSynthesis.speak(u);
 }
 
-/* ===== ALERT LOGIC ===== */
+/* ===== ALERT CHECK ===== */
 function checkWP(){
   for(const w of wps){
     if(w.passed) continue;
@@ -174,7 +179,8 @@ function checkWP(){
     if(!w.pre && d<=leadM && d>0){
       w.pre=true;
       beep(600,120);
-      log(`PRE ${w.txt}`);
+      log(`PRE: ${w.txt}`);
+      renderAlerts();
     }
     if(!w.alert && d<=0){
       w.alert=true;
@@ -183,10 +189,10 @@ function checkWP(){
       navigator.vibrate?.(250);
       say(w.txt);
       showAlert(w.txt);
-      log(`ALERT ${w.txt}`);
+      log(`ALERT: ${w.txt}`);
+      renderAlerts();
     }
   }
-  renderAlerts();
 }
 
 /* ===== ALERT LIST ===== */
@@ -209,10 +215,12 @@ function renderAlerts(){
       </div>`;
   }).join('');
 }
+
 function delAlert(i){
   wps.splice(i,1);
   renderAlerts();
 }
+
 function editAlert(i){
   const w=wps[i];
   const nd=prompt('Razdalja (m od zdaj):',Math.max(1,Math.round(w.km*1000-total)));
@@ -254,29 +262,49 @@ $('startBtn').onclick=()=>{
   measure=true;partial=0;
   $('startBtn').classList.add('active');
   $('stopBtn').classList.remove('active');
+  log('START');
 };
+
 $('stopBtn').onclick=()=>{
   measure=false;
   $('stopBtn').classList.add('active');
   $('startBtn').classList.remove('active');
+  log('STOP');
 };
+
 $('addAlert').onclick=()=>{
-  if(!measure) return showAlert('Najprej START');
   const d=Number($('alertDist').value);
-  if(!d) return;
-  const txt=$('alertTxt').value||`Opozorilo čez ${d} m`;
-  wps.push({km:(total+d)/1000,txt,pre:false,alert:false,passed:false});
-  $('alertDist').value='';$('alertTxt').value='';
-  renderAlerts();
-};
-$('btnWake').onclick=async()=>{
-  if(!wakeLock){
-    wakeLock=await navigator.wakeLock.request('screen');
-  }else{
-    await wakeLock.release();wakeLock=null;
+  if(isNaN(d)||d<=0){
+    showAlert('Vnesi razdaljo v metrih');
+    return;
   }
+  const txt=$('alertTxt').value.trim()||`Opozorilo čez ${d} m`;
+  wps.push({
+    km:(total+d)/1000,
+    txt,
+    pre:false,
+    alert:false,
+    passed:false
+  });
+  wps.sort((a,b)=>a.km-b.km);
+  $('alertDist').value='';
+  $('alertTxt').value='';
+  renderAlerts();
+  log(`ADD: ${txt} (+${d}m)`);
 };
+
+$('btnWake').onclick=async()=>{
+  try{
+    if(!wakeLock){
+      wakeLock=await navigator.wakeLock.request('screen');
+    }else{
+      await wakeLock.release();
+      wakeLock=null;
+    }
+  }catch{}
+};
+
+renderAlerts();
 </script>
 </body>
 </html>
-``
