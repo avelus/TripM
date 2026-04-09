@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Manual Alerts (Final)</title>
+<title>TripM – Stable Manual Alerts</title>
 
 <style>
 body{
@@ -60,10 +60,11 @@ button{ cursor:pointer; }
   padding:12px;
   display:none;
   z-index:9999;
+  text-align:center;
 }
 
 .log{
-  max-height:180px;
+  max-height:160px;
   overflow:auto;
   border:1px dashed #34465e;
   background:#0f1620;
@@ -85,7 +86,7 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big">0.000</div>
-  <div id="gpss" class="label">Čakam GPS…</div>
+  <div id="gpss" class="label">Čakam GPS dovoljenje…</div>
 </div>
 
 <!-- PARTIAL -->
@@ -104,13 +105,13 @@ button{ cursor:pointer; }
   <div class="label">Dodaj opozorilo (TOTAL)</div>
   <div class="row">
     <input id="alertDist" type="number" min="1" placeholder="Čez (m)" style="width:120px">
-    <input id="alertTxt" type="text" placeholder="Besedilo" style="flex:1">
+    <input id="alertTxt" type="text" placeholder="Besedilo opozorila" style="flex:1">
   </div>
   <div class="row" style="margin-top:10px">
     <button id="addAlert" class="primary bigAdd">➕ DODAJ OPOZORILO</button>
   </div>
   <div class="label" style="margin-top:6px">
-    Predopozorilo: <b>100 m (globalno)</b>
+    Predopozorilo: <b>100 m</b>
   </div>
 </div>
 
@@ -130,61 +131,75 @@ button{ cursor:pointer; }
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* ===== GLOBALS ===== */
-let total=0,partial=0,last=null,measure=false;
-let leadM=100;       // ✅ default predopozorilo
-let minStep=0.3,maxAcc=30;
-let wps=[];
-let wakeLock=null;
+/* ================= GLOBALS ================= */
+let total = 0;
+let partial = 0;
+let last = null;
+let measure = false;
 
-const $=id=>document.getElementById(id);
-const fmt=m=>(m/1000).toFixed(3);
+let leadM = 100;      // ✅ default predopozorilo
+let minStep = 0.3;
+let maxAcc = 30;
 
-/* ===== LOG ===== */
-function log(m){
-  const box=$('log');
-  box.textContent+=(box.textContent?'\n':'')+m;
-  box.scrollTop=box.scrollHeight;
+let wps = [];
+let wakeLock = null;
+
+const $ = id => document.getElementById(id);
+const fmt = m => (m/1000).toFixed(3);
+
+/* ================= LOG ================= */
+function log(msg){
+  const box = $('log');
+  if(!box) return;
+  box.textContent += (box.textContent ? '\n' : '') + msg;
+  box.scrollTop = box.scrollHeight;
 }
 
-/* ===== ALERT UI ===== */
-function showAlert(t){
-  $('amsg').textContent=t;
-  $('alert').style.display='block';
+/* ================= ALERT UI ================= */
+function showAlert(msg){
+  $('amsg').textContent = msg;
+  const a = $('alert');
+  a.style.display = 'block';
   clearTimeout(showAlert.t);
-  showAlert.t=setTimeout(()=> $('alert').style.display='none',6000);
+  showAlert.t = setTimeout(()=> a.style.display='none', 6000);
 }
 
-/* ===== SOUND ===== */
-function beep(f=900,m=180){
+/* ================= SOUND ================= */
+function beep(freq=900, ms=180){
   try{
-    const c=new AudioContext(),o=c.createOscillator();
-    o.frequency.value=f;o.connect(c.destination);o.start();
-    setTimeout(()=>{o.stop();c.close();},m);
-  }catch{}
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    o.frequency.value = freq;
+    o.connect(ctx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); ctx.close(); }, ms);
+  }catch(e){}
 }
-function say(t){
-  const u=new SpeechSynthesisUtterance(t);
-  u.lang='sl-SI';
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
+function say(txt){
+  try{
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = 'sl-SI';
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }catch(e){}
 }
 
-/* ===== ALERT CHECK ===== */
-function checkWP(){
+/* ================= ALERT LOGIC ================= */
+function checkAlerts(){
   for(const w of wps){
     if(w.passed) continue;
-    const d=w.km*1000-total;
+    const d = w.km*1000 - total;
 
-    if(!w.pre && d<=leadM && d>0){
-      w.pre=true;
+    if(!w.pre && d <= leadM && d > 0){
+      w.pre = true;
       beep(600,120);
       log(`PRE: ${w.txt}`);
       renderAlerts();
     }
-    if(!w.alert && d<=0){
-      w.alert=true;
-      w.passed=true;
+
+    if(!w.alert && d <= 0){
+      w.alert = true;
+      w.passed = true;
       beep();
       navigator.vibrate?.(250);
       say(w.txt);
@@ -195,19 +210,22 @@ function checkWP(){
   }
 }
 
-/* ===== ALERT LIST ===== */
+/* ================= ALERT LIST ================= */
 function renderAlerts(){
-  const box=$('alertList');
+  const box = $('alertList');
   if(!wps.length){
-    box.innerHTML='<div style="opacity:.6">Ni opozoril</div>';
+    box.innerHTML = '<div style="opacity:.6">Ni opozoril</div>';
     return;
   }
-  box.innerHTML=wps.map((w,i)=>{
-    const d=Math.round(w.km*1000-total);
-    const s=w.passed?'✅':(w.pre?'⚠️':'⏳');
+  box.innerHTML = wps.map((w,i)=>{
+    const d = Math.round(w.km*1000 - total);
+    const s = w.passed ? '✅' : (w.pre ? '⚠️' : '⏳');
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-        <div>${s} ${w.txt}<br><span style="opacity:.6">${d>0?d+' m':'—'}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div>
+          ${s} ${w.txt}<br>
+          <span style="opacity:.6">${d>0 ? d+' m' : '—'}</span>
+        </div>
         <div>
           <button onclick="editAlert(${i})">✏️</button>
           <button onclick="delAlert(${i})">🗑️</button>
@@ -222,63 +240,79 @@ function delAlert(i){
 }
 
 function editAlert(i){
-  const w=wps[i];
-  const nd=prompt('Razdalja (m od zdaj):',Math.max(1,Math.round(w.km*1000-total)));
+  const w = wps[i];
+  const nd = prompt('Razdalja (m od zdaj):', Math.max(1, Math.round(w.km*1000-total)));
   if(nd===null) return;
-  const nt=prompt('Besedilo:',w.txt);
+  const nt = prompt('Besedilo:', w.txt);
   if(nt===null) return;
-  w.km=(total+Number(nd))/1000;
-  w.txt=nt;
-  w.pre=false;w.alert=false;w.passed=false;
+
+  w.km = (total + Number(nd)) / 1000;
+  w.txt = nt;
+  w.pre = w.alert = w.passed = false;
   renderAlerts();
 }
 
-/* ===== GPS ===== */
-navigator.geolocation.watchPosition(p=>{
-  const acc=p.coords.accuracy;
-  $('gpss').textContent=`GPS acc ${Math.round(acc)} m`;
-  if(acc>maxAcc) return;
+/* ================= GPS ================= */
+if('geolocation' in navigator){
+  navigator.geolocation.watchPosition(
+    p=>{
+      const acc = p.coords.accuracy;
+      $('gpss').textContent = `GPS OK (acc ${Math.round(acc)} m)`;
+      if(acc > maxAcc) return;
 
-  const now={lat:p.coords.latitude,lon:p.coords.longitude};
-  if(last){
-    const R=6371000,rad=x=>x*Math.PI/180;
-    const d=Math.acos(
-      Math.sin(rad(last.lat))*Math.sin(rad(now.lat))+
-      Math.cos(rad(last.lat))*Math.cos(rad(now.lat))*Math.cos(rad(now.lon-last.lon))
-    )*R;
+      const now = { lat:p.coords.latitude, lon:p.coords.longitude };
+      if(last){
+        const R=6371000, rad=x=>x*Math.PI/180;
+        const d = Math.acos(
+          Math.sin(rad(last.lat))*Math.sin(rad(now.lat)) +
+          Math.cos(rad(last.lat))*Math.cos(rad(now.lat)) *
+          Math.cos(rad(now.lon-last.lon))
+        ) * R;
 
-    if(measure && d>=minStep){
-      total+=d;partial+=d;
-      $('total').textContent=fmt(total);
-      $('partial').textContent=fmt(partial);
-      checkWP();
-    }
-  }
-  last=now;
-},{},{enableHighAccuracy:true});
+        if(measure && d >= minStep){
+          total += d;
+          partial += d;
+          $('total').textContent = fmt(total);
+          $('partial').textContent = fmt(partial);
+          checkAlerts();
+        }
+      }
+      last = now;
+    },
+    e=>{
+      $('gpss').textContent = 'GPS napaka';
+      log('GPS ERR: '+(e.message||e.code));
+    },
+    { enableHighAccuracy:true, maximumAge:0, timeout:8000 }
+  );
+}else{
+  $('gpss').textContent = 'GPS ni podprt';
+}
 
-/* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{
-  measure=true;partial=0;
+/* ================= BUTTONS ================= */
+$('startBtn').onclick = ()=>{
+  measure = true;
+  partial = 0;
   $('startBtn').classList.add('active');
   $('stopBtn').classList.remove('active');
   log('START');
 };
 
-$('stopBtn').onclick=()=>{
-  measure=false;
+$('stopBtn').onclick = ()=>{
+  measure = false;
   $('stopBtn').classList.add('active');
   $('startBtn').classList.remove('active');
   log('STOP');
 };
 
-$('addAlert').onclick=()=>{
-  const d=Number($('alertDist').value);
-  if(isNaN(d)||d<=0){
-    showAlert('Vnesi razdaljo v metrih');
+$('addAlert').onclick = ()=>{
+  const d = Number($('alertDist').value);
+  if(isNaN(d) || d <= 0){
+    showAlert('Vnesi razdaljo (m)');
     return;
   }
-  const txt=$('alertTxt').value.trim()||`Opozorilo čez ${d} m`;
+  const txt = $('alertTxt').value.trim() || `Opozorilo čez ${d} m`;
+
   wps.push({
     km:(total+d)/1000,
     txt,
@@ -287,21 +321,22 @@ $('addAlert').onclick=()=>{
     passed:false
   });
   wps.sort((a,b)=>a.km-b.km);
+
   $('alertDist').value='';
   $('alertTxt').value='';
   renderAlerts();
   log(`ADD: ${txt} (+${d}m)`);
 };
 
-$('btnWake').onclick=async()=>{
+$('btnWake').onclick = async ()=>{
   try{
     if(!wakeLock){
-      wakeLock=await navigator.wakeLock.request('screen');
+      wakeLock = await navigator.wakeLock.request('screen');
     }else{
       await wakeLock.release();
-      wakeLock=null;
+      wakeLock = null;
     }
-  }catch{}
+  }catch(e){}
 };
 
 renderAlerts();
