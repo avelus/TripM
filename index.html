@@ -25,6 +25,12 @@ body{
   font-weight:800;
   font-family:ui-monospace,monospace;
 }
+
+/* ✅ +50 % za TOTAL */
+.bigTotal{
+  font-size:3.6rem; /* ~50 % več */
+}
+
 .label{ color:#a3b8d4; font-size:.9rem; }
 .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 
@@ -53,6 +59,15 @@ button{ cursor:pointer; }
 .leadBtn.active{
   background:#1d5a2b;
   border-color:#2e7d3d;
+}
+
+#startBtn.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
+#stopBtn.active{
+  background:#7a2222;
+  border-color:#a23a3a;
 }
 
 .alert{
@@ -94,7 +109,7 @@ button{ cursor:pointer; }
 <!-- TOTAL -->
 <div class="card">
   <div class="label">TOTAL (km)</div>
-  <div id="total" class="big">0.000</div>
+  <div id="total" class="big bigTotal">0.000</div>
 
   <div class="row">
     <button id="tm" class="bigCorr">−10 m</button>
@@ -291,12 +306,32 @@ if('geolocation'in navigator){
 }
 
 /* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{ measure=true; };
-$('stopBtn').onclick=()=>{ measure=false; };
+$('startBtn').onclick=()=>{
+  measure=true;
+  $('startBtn').classList.add('active');
+  $('stopBtn').classList.remove('active');
+  log('START');
+};
+$('stopBtn').onclick=()=>{
+  measure=false;
+  $('stopBtn').classList.add('active');
+  $('startBtn').classList.remove('active');
+  log('STOP');
+};
 
-$('tm').onclick=()=>{ total=Math.max(0,total-10); $('total').textContent=fmt(total); updateNext(); };
-$('tp').onclick=()=>{ total+=10; $('total').textContent=fmt(total); updateNext(); };
+/* TOTAL correction */
+$('tm').onclick=()=>{
+  total=Math.max(0,total-10);
+  $('total').textContent=fmt(total);
+  updateNext();
+};
+$('tp').onclick=()=>{
+  total+=10;
+  $('total').textContent=fmt(total);
+  updateNext();
+};
 
+/* Lead select */
 document.querySelectorAll('.leadBtn').forEach(b=>{
   b.onclick=()=>{
     document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
@@ -305,6 +340,7 @@ document.querySelectorAll('.leadBtn').forEach(b=>{
   };
 });
 
+/* Add alert */
 $('addAlert').onclick=()=>{
   const d=Number($('alertDist').value);
   if(!d||d<=0){ showAlert('Vnesi razdaljo'); return; }
@@ -324,11 +360,22 @@ $('addAlert').onclick=()=>{
   log(`ADD: ${txt} (+${d}m, lead ${leadM}m)`);
 };
 
+/* Wake‑Lock */
 $('btnWake').onclick=async()=>{
   try{
-    if(!wakeLock) wakeLock=await navigator.wakeLock.request('screen');
-    else{ await wakeLock.release(); wakeLock=null; }
-  }catch{}
+    if(!wakeLock){
+      wakeLock=await navigator.wakeLock.request('screen');
+      $('btnWake').textContent='🔒 Wake‑Lock ON';
+      log('Wake‑Lock ON');
+    }else{
+      await wakeLock.release();
+      wakeLock=null;
+      $('btnWake').textContent='🔆 Wake‑Lock';
+      log('Wake‑Lock OFF');
+    }
+  }catch(e){
+    log('Wake‑Lock ERR');
+  }
 };
 
 renderAlerts(); updateNext();
