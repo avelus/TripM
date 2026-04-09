@@ -163,9 +163,21 @@ const LOG_MAX=20;
 let loggingEnabled=true;
 let audioCtx=null;
 
+/* ========== HELPERS ========== */
 const $=id=>document.getElementById(id);
 const fmt=x=>(x/1000).toFixed(3);
 const ts=()=>new Date().toLocaleTimeString();
+
+/* ========== LOG ========== */
+function log(msg){
+  if(!loggingEnabled) return;
+  const box=$('log');
+  const lines=(box.textContent?box.textContent.split('\n'):[]);
+  lines.push(`[${ts()}] ${msg}`);
+  while(lines.length>LOG_MAX) lines.shift();
+  box.textContent=lines.join('\n');
+  box.scrollTop=box.scrollHeight;
+}
 
 /* ========== SOUND + TTS ========== */
 function attentionSoundAndSpeech(txt){
@@ -196,17 +208,6 @@ function attentionSoundAndSpeech(txt){
       speechSynthesis.speak(u);
     },1400);
   }catch{}
-}
-
-/* ========== LOG ========== */
-function log(msg){
-  if(!loggingEnabled) return;
-  const box=$('log');
-  const lines=(box.textContent?box.textContent.split('\n'):[]);
-  lines.push(`[${ts()}] ${msg}`);
-  while(lines.length>LOG_MAX) lines.shift();
-  box.textContent=lines.join('\n');
-  box.scrollTop=box.scrollHeight;
 }
 
 /* ========== HAVERSINE ========== */
@@ -325,12 +326,14 @@ $('startBtn').onclick=()=>{
   measure=true;
   $('startBtn').classList.add('active');
   $('stopBtn').classList.remove('warn');
+  log('START');
 };
 
 $('stopBtn').onclick=()=>{
   measure=false;
   $('stopBtn').classList.add('warn');
   $('startBtn').classList.remove('active');
+  log('STOP');
 };
 
 $('tm').onclick=()=>{
@@ -338,6 +341,7 @@ $('tm').onclick=()=>{
   $('total').textContent=fmt(total);
   updateNext(); renderAlerts();
 };
+
 $('tp').onclick=()=>{
   total+=10;
   $('total').textContent=fmt(total);
@@ -352,6 +356,7 @@ $('resetTotal').onclick=()=>{
     w.pre=false; w.alert=false; w.passed=false;
   });
   updateNext(); renderAlerts();
+  log('TOTAL RESET');
 };
 
 document.querySelectorAll('.leadBtn').forEach(b=>{
@@ -371,6 +376,7 @@ $('addAlert').onclick=()=>{
   $('alertDist').value='';
   $('alertTxt').value='';
   updateNext(); renderAlerts();
+  log(`ADD ${txt} @${d}m`);
 };
 
 $('logToggle').onchange=e=>{
@@ -383,10 +389,12 @@ $('btnWake').onclick=async()=>{
     if(!wakeLock){
       wakeLock=await navigator.wakeLock.request('screen');
       $('btnWake').classList.add('info');
+      log('Wake‑Lock ON');
     }else{
       await wakeLock.release();
       wakeLock=null;
       $('btnWake').classList.remove('info');
+      log('Wake‑Lock OFF');
     }
   }catch{}
 };
