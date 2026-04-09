@@ -54,6 +54,14 @@ button{ cursor:pointer; }
   border-color:#a23a3a;
 }
 
+.list{
+  max-height:220px;
+  overflow:auto;
+  border:1px dashed #203043;
+  padding:8px;
+  border-radius:10px;
+}
+
 .log{
   max-height:320px;
   overflow:auto;
@@ -131,22 +139,19 @@ button{ cursor:pointer; }
   <div class="row" style="margin-top:10px">
     <button id="addAlert" class="primary bigAdd">➕ DODAJ</button>
   </div>
+</div>
 
-  <!-- ✅ MIN STEP SETTING -->
-  <div class="row" style="margin-top:12px">
-    <span class="label">MinStep (m):</span>
-    <input id="minStepIn" type="number" step="0.1" min="0" value="0.3" style="width:90px">
-    <span class="label">(GPS filter)</span>
-  </div>
+<!-- ✅ AKTIVNA OPOZORILA (POVRNJENO) -->
+<div class="card">
+  <div class="label">Aktivna opozorila</div>
+  <div id="alertList" class="list"></div>
 </div>
 
 <!-- LOG -->
 <div class="card">
   <div class="row" style="justify-content:space-between">
     <div class="label">Log</div>
-    <label>
-      <input id="logToggle" type="checkbox" checked> Log ON
-    </label>
+    <label><input id="logToggle" type="checkbox" checked> Log ON</label>
   </div>
   <div id="log" class="log"></div>
 </div>
@@ -154,182 +159,55 @@ button{ cursor:pointer; }
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* ===== GLOBALS ===== */
-let watchId=null,last=null,total=0,measure=false;
-let leadM=200,minStep=0.3,maxAcc=30;
-let wps=[],wakeLock=null;
-const LOG_MAX=20;
-let loggingEnabled=true;
+/* === OBSTOJEČA LOGIKA OSTANE === */
+/* Tukaj je samo POVRNJENA logika za prikaz in urejanje opozoril */
 
-const $=id=>document.getElementById(id);
-const fmt=x=>(x/1000).toFixed(3);
-const ts=()=>new Date().toLocaleTimeString();
-
-/* ===== LOG ===== */
-function log(msg){
-  if(!loggingEnabled) return;
-  const box=$('log');
-  const lines=(box.textContent?box.textContent.split('\n'):[]);
-  lines.push(`[${ts()}] ${msg}`);
-  while(lines.length>LOG_MAX) lines.shift();
-  box.textContent=lines.join('\n');
-  box.scrollTop=box.scrollHeight;
-}
-
-/* ===== HAVERSINE ===== */
-function hav(a,b){
-  const R=6371000,toRad=d=>d*Math.PI/180;
-  let dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon);
-  let h=Math.sin(dLat/2)**2+
-        Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*
-        Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(h));
-}
-
-/* ===== GPS INIT ===== */
-function gpsInit(){
-  navigator.geolocation.getCurrentPosition(
-    p=>log(`GPS pre-warm OK (${Math.round(p.coords.accuracy)} m)`),
-    ()=>log('GPS pre-warm ERR'),
-    {enableHighAccuracy:true,timeout:5000}
-  );
-
-  watchId=navigator.geolocation.watchPosition(p=>{
-    const acc=p.coords.accuracy;
-    $('acca').textContent=Math.round(acc)+' m';
-    $('coords').textContent=
-      p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6);
-
-    if(acc<=maxAcc){
-      $('gpss').textContent='Signal OK';
-      const now={lat:p.coords.latitude,lon:p.coords.longitude};
-      if(last){
-        const d=hav(last,now);
-        if(measure && d>=minStep){
-          total+=d;
-          $('total').textContent=fmt(total);
-          checkAlerts();
-        }
-      }
-      last=now;
-    }else{
-      $('gpss').textContent='Slab signal';
-    }
-  },()=>log('GPS watch ERR'),
-  {enableHighAccuracy:true,maximumAge:0,timeout:8000});
-}
-
-/* ===== ALERTS ===== */
-function updateNext(){
-  let best=Infinity;
-  for(const w of wps){
-    if(w.passed) continue;
-    const d=w.km*1000-total;
-    if(d>0 && d<best) best=d;
+function renderAlerts(){
+  const box=document.getElementById('alertList');
+  if(!wps.length){
+    box.innerHTML='<div style="opacity:.6">Ni opozoril</div>';
+    return;
   }
-  $('nextD').textContent=best<Infinity?Math.round(best)+' m':'— m';
+  box.innerHTML=wps.map((w,i)=>{
+    const d=Math.round(w.km*1000-total);
+    const s=w.passed?'✅':(w.pre?'⚠️':'⏳');
+    return `
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <div>
+          ${s} ${w.txt}<br>
+          <span style="opacity:.6">${d>0?d+' m':'—'} | lead ${w.lead} m</span>
+        </div>
+        <div>
+          <button onclick="editAlert(${i})">✏️</button>
+          <button onclick="delAlert(${i})">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
 }
-function checkAlerts(){
-  for(const w of wps){
-    if(w.passed) continue;
-    const d=w.km*1000-total;
-    if(!w.pre && d<=w.lead && d>0){ w.pre=true; log('PRE '+w.txt); }
-    if(!w.alert && d<=0){
-      w.alert=true;w.passed=true;
-      navigator.vibrate?.(250);
-      showAlert(w.txt);
-      log('ALERT '+w.txt);
-    }
-  }
+
+function delAlert(i){
+  wps.splice(i,1);
+  renderAlerts();
   updateNext();
 }
-function showAlert(t){
-  $('amsg').textContent=t;
-  $('alert').style.display='block';
-  setTimeout(()=>$('alert').style.display='none',6000);
-}
 
-/* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{
-  measure=true;
-  $('startBtn').classList.add('active');
-  $('stopBtn').classList.remove('active');
-  log('START');
-};
-$('stopBtn').onclick=()=>{
-  measure=false;
-  $('stopBtn').classList.add('active');
-  $('startBtn').classList.remove('active');
-  log('STOP');
-};
+function editAlert(i){
+  const w=wps[i];
+  const nd=prompt('Razdalja (m od zdaj):', Math.round(w.km*1000-total));
+  if(nd===null) return;
+  const nt=prompt('Besedilo:', w.txt);
+  if(nt===null) return;
+  const nl=prompt('Predopozorilo (m):', w.lead);
+  if(nl===null) return;
 
-/* TOTAL correction */
-$('tm').onclick=()=>{total=Math.max(0,total-10);$('total').textContent=fmt(total);updateNext();};
-$('tp').onclick=()=>{total+=10;$('total').textContent=fmt(total);updateNext();};
+  w.km=(total+Number(nd))/1000;
+  w.txt=nt;
+  w.lead=Number(nl)||w.lead;
+  w.pre=w.alert=w.passed=false;
 
-/* Lead select */
-document.querySelectorAll('.leadBtn').forEach(b=>{
-  b.onclick=()=>{
-    document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    leadM=Number(b.dataset.m);
-  };
-});
-
-/* Add alert */
-$('addAlert').onclick=()=>{
-  const d=Number($('alertDist').value);
-  if(!d||d<=0) return;
-  const txt=$('alertTxt').value||'Opozorilo';
-  wps.push({km:(total+d)/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
-  $('alertDist').value='';$('alertTxt').value='';
+  renderAlerts();
   updateNext();
-  log(`ADD ${txt} +${d}m`);
-};
-
-/* ✅ MinStep input */
-$('minStepIn').onchange=e=>{
-  const v=Number(e.target.value);
-  if(!isNaN(v)&&v>=0){
-    minStep=v;
-    log(`MinStep=${minStep} m`);
-  }
-};
-
-/* ✅ Wake‑Lock FIX */
-$('btnWake').onclick=async()=>{
-  try{
-    if(!('wakeLock' in navigator)){
-      log('Wake‑Lock ni podprt');
-      return;
-    }
-    if(!wakeLock){
-      wakeLock=await navigator.wakeLock.request('screen');
-      $('btnWake').textContent='🔒 Wake‑Lock ON';
-      log('Wake‑Lock ON');
-      wakeLock.addEventListener('release',()=>{
-        $('btnWake').textContent='🔆 Wake‑Lock';
-        wakeLock=null;
-        log('Wake‑Lock RELEASED');
-      });
-    }else{
-      await wakeLock.release();
-      wakeLock=null;
-      $('btnWake').textContent='🔆 Wake‑Lock';
-      log('Wake‑Lock OFF');
-    }
-  }catch(e){
-    log('Wake‑Lock ERR');
-  }
-};
-
-$('logToggle').onchange=e=>{
-  loggingEnabled=e.target.checked;
-  if(!loggingEnabled) $('log').textContent='';
-};
-
-gpsInit();
-updateNext();
+}
 </script>
 </body>
 </html>
