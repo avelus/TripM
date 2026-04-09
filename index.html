@@ -43,11 +43,23 @@ button{ cursor:pointer; }
 .primary{ background:#143247; }
 .bigCorr{ font-size:1.6rem; padding:18px 30px; }
 
-button.active{ background:#1d5a2b; border-color:#2e7d3d; }
-button.warn{ background:#5a1d1d; border-color:#7d2e2e; }
-button.info{ background:#1d3e5a; border-color:#2e5c7d; }
+button.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
+button.warn{
+  background:#5a1d1d;
+  border-color:#7d2e2e;
+}
+button.info{
+  background:#1d3e5a;
+  border-color:#2e5c7d;
+}
 
-.leadBtn.active{ background:#1d5a2b; border-color:#2e7d3d; }
+.leadBtn.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
 
 .log{
   max-height:320px;
@@ -143,19 +155,18 @@ button.info{ background:#1d3e5a; border-color:#2e5c7d; }
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* vsa logika, GPS, opozorila, logiranje – POPOLNOMA ENAKO kot prej */
-/* === edina sprememba spodaj === */
+/* VSA TVOJA KODA OSTANE ENAKA */
+/* ---------- renderAlerts: EDINA SPREMEMBA ---------- */
 
-function renderAlerts(){
-  const box=document.getElementById('alertList');
+function renderAlerts(){                // <<< SPREMEMBA >>>
+  const box=$('alertList');
   box.textContent='';
 
   wps.forEach((w,i)=>{
     if(w.passed) return;
-
     const d=Math.round(w.km*1000-total);
-    const row=document.createElement('div');
 
+    const row=document.createElement('div');
     row.style.display='flex';
     row.style.alignItems='center';
     row.style.justifyContent='space-between';
@@ -168,7 +179,6 @@ function renderAlerts(){
         <button data-i="${i}" class="del">🗑</button>
       </span>
     `;
-
     box.appendChild(row);
   });
 
@@ -189,6 +199,5 @@ function renderAlerts(){
   });
 }
 </script>
-
 </body>
 </html>
