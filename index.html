@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Manual Alerts</title>
+<title>TripM – Manual Alerts FINAL</title>
 
 <style>
 body{
@@ -39,7 +39,16 @@ button,input{
 button{ cursor:pointer; }
 
 .primary{ background:#143247; border-color:#255a79; }
-.bigAdd{ font-size:1.4rem; padding:16px 28px; }
+
+.bigCorr{
+  font-size:1.6rem;
+  padding:18px 30px;
+}
+
+.bigAdd{
+  font-size:1.4rem;
+  padding:16px 28px;
+}
 
 .leadBtn.active{
   background:#1d5a2b;
@@ -57,7 +66,6 @@ button{ cursor:pointer; }
   padding:12px;
   display:none;
   z-index:9999;
-  text-align:center;
 }
 
 .list{
@@ -78,10 +86,6 @@ button{ cursor:pointer; }
   font-family:ui-monospace,monospace;
   font-size:.85rem;
 }
-
-#startBtn,#stopBtn{font-size:1.6rem;padding:18px 26px;}
-#startBtn.active{background:#1d5a2b;}
-#stopBtn.active{background:#7a2222;}
 </style>
 </head>
 
@@ -93,8 +97,8 @@ button{ cursor:pointer; }
   <div id="total" class="big">0.000</div>
 
   <div class="row">
-    <button id="tm">−10 m</button>
-    <button id="tp">+10 m</button>
+    <button id="tm" class="bigCorr">−10 m</button>
+    <button id="tp" class="bigCorr">+10 m</button>
   </div>
 
   <div id="gpss" class="label">Inicializiram GPS…</div>
@@ -120,11 +124,12 @@ button{ cursor:pointer; }
   <div class="label">Dodaj opozorilo</div>
 
   <div class="row">
+    <input id="alertDist" type="number" min="1" placeholder="Čez (m)" style="width:120px">
     <input id="alertTxt" type="text" placeholder="Besedilo opozorila" style="flex:1">
   </div>
 
   <div class="row" style="margin-top:10px">
-    <span class="label">Pred točko:</span>
+    <span class="label">Predopozorilo:</span>
     <button class="leadBtn" data-m="50">50 m</button>
     <button class="leadBtn" data-m="100">100 m</button>
     <button class="leadBtn active" data-m="200">200 m</button>
@@ -171,7 +176,7 @@ function log(msg){
   box.scrollTop=box.scrollHeight;
 }
 
-/* ===== NEXT ALERT DIST ===== */
+/* ===== NEXT ALERT ===== */
 function updateNext(){
   let best=Infinity;
   for(const w of wps){
@@ -179,7 +184,7 @@ function updateNext(){
     const d=w.km*1000-total;
     if(d>0 && d<best) best=d;
   }
-  $('nextD').textContent=best<Infinity ? Math.round(best)+' m' : '— m';
+  $('nextD').textContent = best<Infinity ? Math.round(best)+' m' : '— m';
 }
 
 /* ===== ALERT LOGIC ===== */
@@ -223,12 +228,40 @@ function renderAlerts(){
     const s=w.passed?'✅':(w.pre?'⚠️':'⏳');
     return `
       <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-        <div>${s} ${w.txt}<br><span style="opacity:.6">${d>0?d+' m':'—'}</span></div>
         <div>
-          <button onclick="wps.splice(${i},1);renderAlerts();updateNext()">🗑️</button>
+          ${s} ${w.txt}<br>
+          <span style="opacity:.6">${d>0?d+' m':'—'} | lead ${w.lead} m</span>
+        </div>
+        <div>
+          <button onclick="editAlert(${i})">✏️</button>
+          <button onclick="delAlert(${i})">🗑️</button>
         </div>
       </div>`;
   }).join('');
+}
+
+function delAlert(i){
+  wps.splice(i,1);
+  renderAlerts();
+  updateNext();
+}
+
+function editAlert(i){
+  const w=wps[i];
+  const nd=prompt('Razdalja sprožitve (m od zdaj):', Math.round(w.km*1000-total));
+  if(nd===null) return;
+  const nt=prompt('Besedilo:', w.txt);
+  if(nt===null) return;
+  const nl=prompt('Predopozorilo (m):', w.lead);
+  if(nl===null) return;
+
+  w.km=(total+Number(nd))/1000;
+  w.txt=nt;
+  w.lead=Number(nl)||w.lead;
+  w.pre=w.alert=w.passed=false;
+
+  renderAlerts();
+  updateNext();
 }
 
 /* ===== GPS INIT ===== */
@@ -258,8 +291,8 @@ if('geolocation'in navigator){
 }
 
 /* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{measure=true;$('startBtn').classList.add('active');$('stopBtn').classList.remove('active');};
-$('stopBtn').onclick=()=>{measure=false;$('stopBtn').classList.add('active');$('startBtn').classList.remove('active');};
+$('startBtn').onclick=()=>{ measure=true; };
+$('stopBtn').onclick=()=>{ measure=false; };
 
 $('tm').onclick=()=>{ total=Math.max(0,total-10); $('total').textContent=fmt(total); updateNext(); };
 $('tp').onclick=()=>{ total+=10; $('total').textContent=fmt(total); updateNext(); };
@@ -273,12 +306,22 @@ document.querySelectorAll('.leadBtn').forEach(b=>{
 });
 
 $('addAlert').onclick=()=>{
+  const d=Number($('alertDist').value);
+  if(!d||d<=0){ showAlert('Vnesi razdaljo'); return; }
   const txt=$('alertTxt').value.trim()||'Opozorilo';
-  wps.push({km:(total+leadM)/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
+
+  wps.push({
+    km:(total+d)/1000,
+    txt,
+    lead:leadM,
+    pre:false, alert:false, passed:false
+  });
+
+  $('alertDist').value='';
   $('alertTxt').value='';
   renderAlerts();
   updateNext();
-  log(`ADD: ${txt} (+${leadM}m)`);
+  log(`ADD: ${txt} (+${d}m, lead ${leadM}m)`);
 };
 
 $('btnWake').onclick=async()=>{
