@@ -43,13 +43,26 @@ button{ cursor:pointer; }
 .bigCorr{ font-size:1.6rem; padding:18px 30px; }
 .bigAdd{ font-size:1.4rem; padding:16px 28px; }
 
+button.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
+button.warn{
+  background:#5a1d1d;
+  border-color:#7d2e2e;
+}
+button.info{
+  background:#1d3e5a;
+  border-color:#2e5c7d;
+}
+
 .leadBtn.active{
   background:#1d5a2b;
   border-color:#2e7d3d;
 }
 
 .log{
-  max-height:320px;           /* ✅ ~20 vrstic */
+  max-height:320px;
   overflow:auto;
   border:1px dashed #34465e;
   background:#0f1620;
@@ -77,7 +90,6 @@ button{ cursor:pointer; }
 
 <body>
 
-<!-- TOTAL -->
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big bigTotal">0.000</div>
@@ -92,13 +104,11 @@ button{ cursor:pointer; }
   <div class="label">Koordinate:</div><div id="coords">—</div>
 </div>
 
-<!-- NEXT ALERT -->
 <div class="card">
   <div class="label">Naslednje opozorilo</div>
   <div id="nextD" class="big">— m</div>
 </div>
 
-<!-- CONTROL -->
 <div class="card">
   <div class="row">
     <button id="startBtn" class="primary">▶ START</button>
@@ -107,7 +117,6 @@ button{ cursor:pointer; }
   </div>
 </div>
 
-<!-- ADD ALERT -->
 <div class="card">
   <div class="label">Dodaj opozorilo</div>
   <div class="row">
@@ -127,7 +136,11 @@ button{ cursor:pointer; }
   </div>
 </div>
 
-<!-- LOG -->
+<div class="card">
+  <div class="label">Aktivna opozorila</div>
+  <div id="alertList" class="log"></div>
+</div>
+
 <div class="card">
   <div class="row" style="justify-content:space-between">
     <div class="label">Log</div>
@@ -141,7 +154,6 @@ button{ cursor:pointer; }
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* ========== GLOBALS ========== */
 let watchId=null,last=null,total=0,measure=false;
 let leadM=200,minStep=0.3,maxAcc=30;
 let wps=[],wakeLock=null;
@@ -152,7 +164,6 @@ const $=id=>document.getElementById(id);
 const fmt=x=>(x/1000).toFixed(3);
 const ts=()=>new Date().toLocaleTimeString();
 
-/* ========== LOG ========== */
 function log(msg){
   if(!loggingEnabled) return;
   const box=$('log');
@@ -163,7 +174,6 @@ function log(msg){
   box.scrollTop=box.scrollHeight;
 }
 
-/* ========== HAVERSINE (ORIGINAL) ========== */
 function hav(a,b){
   const R=6371000,toRad=d=>d*Math.PI/180;
   let dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon);
@@ -173,11 +183,10 @@ function hav(a,b){
   return 2*R*Math.asin(Math.sqrt(h));
 }
 
-/* ========== GPS INIT (ORIGINAL) ========== */
 function gpsInit(){
   navigator.geolocation.getCurrentPosition(
     p=>log(`GPS pre-warm OK (${Math.round(p.coords.accuracy)} m)`),
-    e=>log(`GPS pre-warm ERR`)
+    ()=>log(`GPS pre-warm ERR`)
   );
 
   watchId=navigator.geolocation.watchPosition(p=>{
@@ -205,7 +214,6 @@ function gpsInit(){
   },()=>log('GPS ERR'),{enableHighAccuracy:true});
 }
 
-/* ========== ALERTS ========== */
 function updateNext(){
   let best=Infinity;
   for(const w of wps){
@@ -215,32 +223,92 @@ function updateNext(){
   }
   $('nextD').textContent=best<Infinity?Math.round(best)+' m':'— m';
 }
+
 function checkAlerts(){
   for(const w of wps){
     if(w.passed) continue;
     const d=w.km*1000-total;
-    if(!w.pre && d<=w.lead && d>0){ w.pre=true; log('PRE '+w.txt); }
+
+    if(!w.pre && d<=w.lead && d>0){
+      w.pre=true;
+      log('PRE '+w.txt);
+    }
     if(!w.alert && d<=0){
-      w.alert=true;w.passed=true;
+      w.alert=true;
+      w.passed=true;
       navigator.vibrate?.(250);
       showAlert(w.txt);
       log('ALERT '+w.txt);
     }
+    if(d>0) break;
   }
   updateNext();
+  renderAlerts();
 }
+
 function showAlert(t){
   $('amsg').textContent=t;
   $('alert').style.display='block';
   setTimeout(()=>$('alert').style.display='none',6000);
 }
 
-/* ========== BUTTONS ========== */
-$('startBtn').onclick=()=>{measure=true;log('START');};
-$('stopBtn').onclick=()=>{measure=false;log('STOP');};
+function renderAlerts(){
+  const box=$('alertList');
+  box.textContent='';
+  wps.forEach((w,i)=>{
+    if(w.passed) return;
+    const d=Math.round(w.km*1000-total);
+    const row=document.createElement('div');
+    row.innerHTML=
+      `${d} m – ${w.txt}
+       <button data-i="${i}" class="edit">✏️</button>
+       <button data-i="${i}" class="del">🗑</button>`;
+    box.appendChild(row);
+  });
 
-$('tm').onclick=()=>{total=Math.max(0,total-10);$('total').textContent=fmt(total);updateNext();};
-$('tp').onclick=()=>{total+=10;$('total').textContent=fmt(total);updateNext();};
+  box.querySelectorAll('.del').forEach(b=>{
+    b.onclick=()=>{
+      wps.splice(b.dataset.i,1);
+      renderAlerts();
+      updateNext();
+    };
+  });
+
+  box.querySelectorAll('.edit').forEach(b=>{
+    b.onclick=()=>{
+      const w=wps[b.dataset.i];
+      const n=prompt('Nov opis',w.txt);
+      if(n!==null){ w.txt=n; renderAlerts(); }
+    };
+  });
+}
+
+$('startBtn').onclick=()=>{
+  measure=true;
+  $('startBtn').classList.add('active');
+  $('stopBtn').classList.remove('warn');
+  log('START');
+};
+
+$('stopBtn').onclick=()=>{
+  measure=false;
+  $('stopBtn').classList.add('warn');
+  $('startBtn').classList.remove('active');
+  log('STOP');
+};
+
+$('tm').onclick=()=>{
+  total=Math.max(0,total-10);
+  $('total').textContent=fmt(total);
+  updateNext();
+  renderAlerts();
+};
+$('tp').onclick=()=>{
+  total+=10;
+  $('total').textContent=fmt(total);
+  updateNext();
+  renderAlerts();
+};
 
 document.querySelectorAll('.leadBtn').forEach(b=>{
   b.onclick=()=>{
@@ -255,7 +323,10 @@ $('addAlert').onclick=()=>{
   if(!d||d<=0) return;
   const txt=$('alertTxt').value||'Opozorilo';
   wps.push({km:(total+d)/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
-  $('alertDist').value='';$('alertTxt').value='';
+  wps.sort((a,b)=>a.km-b.km);
+  $('alertDist').value='';
+  $('alertTxt').value='';
+  renderAlerts();
   updateNext();
   log(`ADD ${txt} +${d}m`);
 };
@@ -269,13 +340,15 @@ $('btnWake').onclick=async()=>{
   try{
     if(!wakeLock){
       wakeLock=await navigator.wakeLock.request('screen');
+      $('btnWake').classList.add('info');
       log('Wake‑Lock ON');
     }else{
       await wakeLock.release();
       wakeLock=null;
+      $('btnWake').classList.remove('info');
       log('Wake‑Lock OFF');
     }
-  }catch{}
+  }catch{ log('Wake‑Lock ERR'); }
 };
 
 gpsInit();
