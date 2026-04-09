@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Manual Alerts FINAL</title>
+<title>TripM – Final (Original GPS)</title>
 
 <style>
 body{
@@ -25,11 +25,7 @@ body{
   font-weight:800;
   font-family:ui-monospace,monospace;
 }
-
-/* ✅ +50 % za TOTAL */
-.bigTotal{
-  font-size:3.6rem; /* ~50 % več */
-}
+.bigTotal{ font-size:3.6rem; }
 
 .label{ color:#a3b8d4; font-size:.9rem; }
 .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
@@ -40,34 +36,28 @@ button,input{
   border:1px solid #2c3c50;
   padding:10px 12px;
   border-radius:10px;
-  font-size:1rem;
 }
 button{ cursor:pointer; }
 
-.primary{ background:#143247; border-color:#255a79; }
-
-.bigCorr{
-  font-size:1.6rem;
-  padding:18px 30px;
-}
-
-.bigAdd{
-  font-size:1.4rem;
-  padding:16px 28px;
-}
+.primary{ background:#143247; }
+.bigCorr{ font-size:1.6rem; padding:18px 30px; }
+.bigAdd{ font-size:1.4rem; padding:16px 28px; }
 
 .leadBtn.active{
   background:#1d5a2b;
   border-color:#2e7d3d;
 }
 
-#startBtn.active{
-  background:#1d5a2b;
-  border-color:#2e7d3d;
-}
-#stopBtn.active{
-  background:#7a2222;
-  border-color:#a23a3a;
+.log{
+  max-height:320px;           /* ✅ ~20 vrstic */
+  overflow:auto;
+  border:1px dashed #34465e;
+  background:#0f1620;
+  padding:8px;
+  border-radius:10px;
+  font-family:ui-monospace,monospace;
+  font-size:.85rem;
+  white-space:pre-wrap;
 }
 
 .alert{
@@ -81,25 +71,6 @@ button{ cursor:pointer; }
   padding:12px;
   display:none;
   z-index:9999;
-}
-
-.list{
-  max-height:220px;
-  overflow:auto;
-  border:1px dashed #203043;
-  padding:8px;
-  border-radius:10px;
-}
-
-.log{
-  max-height:160px;
-  overflow:auto;
-  border:1px dashed #34465e;
-  background:#0f1620;
-  padding:8px;
-  border-radius:10px;
-  font-family:ui-monospace,monospace;
-  font-size:.85rem;
 }
 </style>
 </head>
@@ -116,7 +87,9 @@ button{ cursor:pointer; }
     <button id="tp" class="bigCorr">+10 m</button>
   </div>
 
-  <div id="gpss" class="label">Inicializiram GPS…</div>
+  <div class="label">GPS status:</div><div id="gpss">Čakam GPS fix…</div>
+  <div class="label">Natančnost:</div><div id="acca">—</div>
+  <div class="label">Koordinate:</div><div id="coords">—</div>
 </div>
 
 <!-- NEXT ALERT -->
@@ -137,10 +110,9 @@ button{ cursor:pointer; }
 <!-- ADD ALERT -->
 <div class="card">
   <div class="label">Dodaj opozorilo</div>
-
   <div class="row">
     <input id="alertDist" type="number" min="1" placeholder="Čez (m)" style="width:120px">
-    <input id="alertTxt" type="text" placeholder="Besedilo opozorila" style="flex:1">
+    <input id="alertTxt" type="text" placeholder="Besedilo" style="flex:1">
   </div>
 
   <div class="row" style="margin-top:10px">
@@ -151,150 +123,78 @@ button{ cursor:pointer; }
   </div>
 
   <div class="row" style="margin-top:10px">
-    <button id="addAlert" class="primary bigAdd">➕ DODAJ OPOZORILO</button>
+    <button id="addAlert" class="primary bigAdd">➕ DODAJ</button>
   </div>
-</div>
-
-<!-- ACTIVE ALERTS -->
-<div class="card">
-  <div class="label">Aktivna opozorila</div>
-  <div id="alertList" class="list"></div>
 </div>
 
 <!-- LOG -->
 <div class="card">
-  <div class="label">Log (zadnjih 20)</div>
+  <div class="row" style="justify-content:space-between">
+    <div class="label">Log</div>
+    <label>
+      <input id="logToggle" type="checkbox" checked> Log ON
+    </label>
+  </div>
   <div id="log" class="log"></div>
 </div>
 
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* ===== GLOBALS ===== */
-let total=0,last=null,measure=false;
-let minStep=0.3,maxAcc=30;
-let leadM=200;
-let wps=[];
-let wakeLock=null;
+/* ========== GLOBALS ========== */
+let watchId=null,last=null,total=0,measure=false;
+let leadM=200,minStep=0.3,maxAcc=30;
+let wps=[],wakeLock=null;
 const LOG_MAX=20;
+let loggingEnabled=true;
 
 const $=id=>document.getElementById(id);
-const fmt=m=>(m/1000).toFixed(3);
+const fmt=x=>(x/1000).toFixed(3);
+const ts=()=>new Date().toLocaleTimeString();
 
-/* ===== LOG ===== */
+/* ========== LOG ========== */
 function log(msg){
+  if(!loggingEnabled) return;
   const box=$('log');
-  const lines=box.textContent.split('\n').filter(l=>l);
-  lines.push(msg);
+  const lines=(box.textContent?box.textContent.split('\n'):[]);
+  lines.push(`[${ts()}] ${msg}`);
   while(lines.length>LOG_MAX) lines.shift();
   box.textContent=lines.join('\n');
   box.scrollTop=box.scrollHeight;
 }
 
-/* ===== NEXT ALERT ===== */
-function updateNext(){
-  let best=Infinity;
-  for(const w of wps){
-    if(w.passed) continue;
-    const d=w.km*1000-total;
-    if(d>0 && d<best) best=d;
-  }
-  $('nextD').textContent = best<Infinity ? Math.round(best)+' m' : '— m';
+/* ========== HAVERSINE (ORIGINAL) ========== */
+function hav(a,b){
+  const R=6371000,toRad=d=>d*Math.PI/180;
+  let dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon);
+  let h=Math.sin(dLat/2)**2+
+        Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*
+        Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
 }
 
-/* ===== ALERT LOGIC ===== */
-function checkAlerts(){
-  for(const w of wps){
-    if(w.passed) continue;
-    const d=w.km*1000-total;
+/* ========== GPS INIT (ORIGINAL) ========== */
+function gpsInit(){
+  navigator.geolocation.getCurrentPosition(
+    p=>log(`GPS pre-warm OK (${Math.round(p.coords.accuracy)} m)`),
+    e=>log(`GPS pre-warm ERR`)
+  );
 
-    if(!w.pre && d<=w.lead && d>0){
-      w.pre=true;
-      log('PRE: '+w.txt);
-    }
-    if(!w.alert && d<=0){
-      w.alert=true; w.passed=true;
-      navigator.vibrate?.(250);
-      showAlert(w.txt);
-      log('ALERT: '+w.txt);
-    }
-  }
-  renderAlerts();
-  updateNext();
-}
-
-/* ===== UI ===== */
-function showAlert(t){
-  $('amsg').textContent=t;
-  $('alert').style.display='block';
-  clearTimeout(showAlert.t);
-  showAlert.t=setTimeout(()=>$('alert').style.display='none',6000);
-}
-
-/* ===== ALERT LIST ===== */
-function renderAlerts(){
-  const box=$('alertList');
-  if(!wps.length){
-    box.innerHTML='<div style="opacity:.6">Ni opozoril</div>';
-    return;
-  }
-  box.innerHTML=wps.map((w,i)=>{
-    const d=Math.round(w.km*1000-total);
-    const s=w.passed?'✅':(w.pre?'⚠️':'⏳');
-    return `
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-        <div>
-          ${s} ${w.txt}<br>
-          <span style="opacity:.6">${d>0?d+' m':'—'} | lead ${w.lead} m</span>
-        </div>
-        <div>
-          <button onclick="editAlert(${i})">✏️</button>
-          <button onclick="delAlert(${i})">🗑️</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function delAlert(i){
-  wps.splice(i,1);
-  renderAlerts();
-  updateNext();
-}
-
-function editAlert(i){
-  const w=wps[i];
-  const nd=prompt('Razdalja sprožitve (m od zdaj):', Math.round(w.km*1000-total));
-  if(nd===null) return;
-  const nt=prompt('Besedilo:', w.txt);
-  if(nt===null) return;
-  const nl=prompt('Predopozorilo (m):', w.lead);
-  if(nl===null) return;
-
-  w.km=(total+Number(nd))/1000;
-  w.txt=nt;
-  w.lead=Number(nl)||w.lead;
-  w.pre=w.alert=w.passed=false;
-
-  renderAlerts();
-  updateNext();
-}
-
-/* ===== GPS INIT ===== */
-if('geolocation'in navigator){
-  navigator.geolocation.watchPosition(p=>{
+  watchId=navigator.geolocation.watchPosition(p=>{
     const acc=p.coords.accuracy;
-    $('gpss').textContent=`GPS OK (${Math.round(acc)} m)`;
-    if(acc>maxAcc) return;
+    $('acca').textContent=Math.round(acc)+' m';
+    $('coords').textContent=
+      p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6);
+
+    if(acc>maxAcc){
+      $('gpss').textContent='Slab signal';
+      return;
+    }
+    $('gpss').textContent='GPS OK';
 
     const now={lat:p.coords.latitude,lon:p.coords.longitude};
     if(last){
-      const R=6371000,rad=x=>x*Math.PI/180;
-      const d=Math.acos(
-        Math.sin(rad(last.lat))*Math.sin(rad(now.lat))+
-        Math.cos(rad(last.lat))*Math.cos(rad(now.lat))*
-        Math.cos(rad(now.lon-last.lon))
-      )*R;
-
+      const d=hav(last,now);
       if(measure && d>=minStep){
         total+=d;
         $('total').textContent=fmt(total);
@@ -302,36 +202,46 @@ if('geolocation'in navigator){
       }
     }
     last=now;
-  },()=>{}, {enableHighAccuracy:true});
+  },()=>log('GPS ERR'),{enableHighAccuracy:true});
 }
 
-/* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{
-  measure=true;
-  $('startBtn').classList.add('active');
-  $('stopBtn').classList.remove('active');
-  log('START');
-};
-$('stopBtn').onclick=()=>{
-  measure=false;
-  $('stopBtn').classList.add('active');
-  $('startBtn').classList.remove('active');
-  log('STOP');
-};
-
-/* TOTAL correction */
-$('tm').onclick=()=>{
-  total=Math.max(0,total-10);
-  $('total').textContent=fmt(total);
+/* ========== ALERTS ========== */
+function updateNext(){
+  let best=Infinity;
+  for(const w of wps){
+    if(w.passed) continue;
+    const d=w.km*1000-total;
+    if(d>0 && d<best) best=d;
+  }
+  $('nextD').textContent=best<Infinity?Math.round(best)+' m':'— m';
+}
+function checkAlerts(){
+  for(const w of wps){
+    if(w.passed) continue;
+    const d=w.km*1000-total;
+    if(!w.pre && d<=w.lead && d>0){ w.pre=true; log('PRE '+w.txt); }
+    if(!w.alert && d<=0){
+      w.alert=true;w.passed=true;
+      navigator.vibrate?.(250);
+      showAlert(w.txt);
+      log('ALERT '+w.txt);
+    }
+  }
   updateNext();
-};
-$('tp').onclick=()=>{
-  total+=10;
-  $('total').textContent=fmt(total);
-  updateNext();
-};
+}
+function showAlert(t){
+  $('amsg').textContent=t;
+  $('alert').style.display='block';
+  setTimeout(()=>$('alert').style.display='none',6000);
+}
 
-/* Lead select */
+/* ========== BUTTONS ========== */
+$('startBtn').onclick=()=>{measure=true;log('START');};
+$('stopBtn').onclick=()=>{measure=false;log('STOP');};
+
+$('tm').onclick=()=>{total=Math.max(0,total-10);$('total').textContent=fmt(total);updateNext();};
+$('tp').onclick=()=>{total+=10;$('total').textContent=fmt(total);updateNext();};
+
 document.querySelectorAll('.leadBtn').forEach(b=>{
   b.onclick=()=>{
     document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
@@ -340,45 +250,36 @@ document.querySelectorAll('.leadBtn').forEach(b=>{
   };
 });
 
-/* Add alert */
 $('addAlert').onclick=()=>{
   const d=Number($('alertDist').value);
-  if(!d||d<=0){ showAlert('Vnesi razdaljo'); return; }
-  const txt=$('alertTxt').value.trim()||'Opozorilo';
-
-  wps.push({
-    km:(total+d)/1000,
-    txt,
-    lead:leadM,
-    pre:false, alert:false, passed:false
-  });
-
-  $('alertDist').value='';
-  $('alertTxt').value='';
-  renderAlerts();
+  if(!d||d<=0) return;
+  const txt=$('alertTxt').value||'Opozorilo';
+  wps.push({km:(total+d)/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
+  $('alertDist').value='';$('alertTxt').value='';
   updateNext();
-  log(`ADD: ${txt} (+${d}m, lead ${leadM}m)`);
+  log(`ADD ${txt} +${d}m`);
 };
 
-/* Wake‑Lock */
+$('logToggle').onchange=e=>{
+  loggingEnabled=e.target.checked;
+  if(!loggingEnabled) $('log').textContent='';
+};
+
 $('btnWake').onclick=async()=>{
   try{
     if(!wakeLock){
       wakeLock=await navigator.wakeLock.request('screen');
-      $('btnWake').textContent='🔒 Wake‑Lock ON';
       log('Wake‑Lock ON');
     }else{
       await wakeLock.release();
       wakeLock=null;
-      $('btnWake').textContent='🔆 Wake‑Lock';
       log('Wake‑Lock OFF');
     }
-  }catch(e){
-    log('Wake‑Lock ERR');
-  }
+  }catch{}
 };
 
-renderAlerts(); updateNext();
+gpsInit();
+updateNext();
 </script>
 </body>
 </html>
