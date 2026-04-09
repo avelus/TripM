@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Stable Manual Alerts</title>
+<title>TripM – Manual Alerts</title>
 
 <style>
 body{
@@ -41,12 +41,9 @@ button{ cursor:pointer; }
 .primary{ background:#143247; border-color:#255a79; }
 .bigAdd{ font-size:1.4rem; padding:16px 28px; }
 
-.list{
-  max-height:220px;
-  overflow:auto;
-  border:1px dashed #203043;
-  padding:8px;
-  border-radius:10px;
+.leadBtn.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
 }
 
 .alert{
@@ -61,6 +58,14 @@ button{ cursor:pointer; }
   display:none;
   z-index:9999;
   text-align:center;
+}
+
+.list{
+  max-height:220px;
+  overflow:auto;
+  border:1px dashed #203043;
+  padding:8px;
+  border-radius:10px;
 }
 
 .log{
@@ -86,13 +91,23 @@ button{ cursor:pointer; }
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big">0.000</div>
+
+  <div class="row">
+    <button id="tm">−10 m</button>
+    <button id="tp">+10 m</button>
+  </div>
+
   <div id="gpss" class="label">Inicializiram GPS…</div>
 </div>
 
-<!-- PARTIAL -->
+<!-- NEXT ALERT -->
 <div class="card">
-  <div class="label">PARTIAL (km)</div>
-  <div id="partial" class="big">0.000</div>
+  <div class="label">Naslednje opozorilo</div>
+  <div id="nextD" class="big">— m</div>
+</div>
+
+<!-- CONTROL -->
+<div class="card">
   <div class="row">
     <button id="startBtn" class="primary">▶ START</button>
     <button id="stopBtn">⏸ STOP</button>
@@ -102,7 +117,7 @@ button{ cursor:pointer; }
 
 <!-- ADD ALERT -->
 <div class="card">
-  <div class="label">Dodaj opozorilo (TOTAL)</div>
+  <div class="label">Dodaj opozorilo</div>
 
   <div class="row">
     <input id="alertTxt" type="text" placeholder="Besedilo opozorila" style="flex:1">
@@ -132,14 +147,13 @@ button{ cursor:pointer; }
   <div id="log" class="log"></div>
 </div>
 
-<!-- POPUP -->
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
 /* ===== GLOBALS ===== */
-let total=0, partial=0, last=null, measure=false;
-let leadM=200;              // ✅ default 200 m
-let minStep=0.3, maxAcc=30;
+let total=0,last=null,measure=false;
+let minStep=0.3,maxAcc=30;
+let leadM=200;
 let wps=[];
 let wakeLock=null;
 const LOG_MAX=20;
@@ -157,31 +171,18 @@ function log(msg){
   box.scrollTop=box.scrollHeight;
 }
 
-/* ===== ALERT UI ===== */
-function showAlert(msg){
-  $('amsg').textContent=msg;
-  const a=$('alert');
-  a.style.display='block';
-  clearTimeout(showAlert.t);
-  showAlert.t=setTimeout(()=>a.style.display='none',6000);
+/* ===== NEXT ALERT DIST ===== */
+function updateNext(){
+  let best=Infinity;
+  for(const w of wps){
+    if(w.passed) continue;
+    const d=w.km*1000-total;
+    if(d>0 && d<best) best=d;
+  }
+  $('nextD').textContent=best<Infinity ? Math.round(best)+' m' : '— m';
 }
 
-/* ===== SOUND ===== */
-function beep(f=900,m=180){
-  try{
-    const c=new AudioContext(),o=c.createOscillator();
-    o.frequency.value=f;o.connect(c.destination);o.start();
-    setTimeout(()=>{o.stop();c.close();},m);
-  }catch{}
-}
-function say(t){
-  const u=new SpeechSynthesisUtterance(t);
-  u.lang='sl-SI';
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
-}
-
-/* ===== ALERT CHECK ===== */
+/* ===== ALERT LOGIC ===== */
 function checkAlerts(){
   for(const w of wps){
     if(w.passed) continue;
@@ -189,22 +190,25 @@ function checkAlerts(){
 
     if(!w.pre && d<=w.lead && d>0){
       w.pre=true;
-      beep(600,120);
-      log(`PRE: ${w.txt}`);
-      renderAlerts();
+      log('PRE: '+w.txt);
     }
-
     if(!w.alert && d<=0){
-      w.alert=true;
-      w.passed=true;
-      beep();
+      w.alert=true; w.passed=true;
       navigator.vibrate?.(250);
-      say(w.txt);
       showAlert(w.txt);
-      log(`ALERT: ${w.txt}`);
-      renderAlerts();
+      log('ALERT: '+w.txt);
     }
   }
+  renderAlerts();
+  updateNext();
+}
+
+/* ===== UI ===== */
+function showAlert(t){
+  $('amsg').textContent=t;
+  $('alert').style.display='block';
+  clearTimeout(showAlert.t);
+  showAlert.t=setTimeout(()=>$('alert').style.display='none',6000);
 }
 
 /* ===== ALERT LIST ===== */
@@ -221,75 +225,45 @@ function renderAlerts(){
       <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
         <div>${s} ${w.txt}<br><span style="opacity:.6">${d>0?d+' m':'—'}</span></div>
         <div>
-          <button onclick="editAlert(${i})">✏️</button>
-          <button onclick="delAlert(${i})">🗑️</button>
+          <button onclick="wps.splice(${i},1);renderAlerts();updateNext()">🗑️</button>
         </div>
       </div>`;
   }).join('');
 }
 
-function delAlert(i){ wps.splice(i,1); renderAlerts(); }
+/* ===== GPS INIT ===== */
+if('geolocation'in navigator){
+  navigator.geolocation.watchPosition(p=>{
+    const acc=p.coords.accuracy;
+    $('gpss').textContent=`GPS OK (${Math.round(acc)} m)`;
+    if(acc>maxAcc) return;
 
-function editAlert(i){
-  const w=wps[i];
-  const nt=prompt('Besedilo:',w.txt);
-  if(nt===null) return;
-  w.txt=nt;
-  w.pre=w.alert=w.passed=false;
-  renderAlerts();
-}
+    const now={lat:p.coords.latitude,lon:p.coords.longitude};
+    if(last){
+      const R=6371000,rad=x=>x*Math.PI/180;
+      const d=Math.acos(
+        Math.sin(rad(last.lat))*Math.sin(rad(now.lat))+
+        Math.cos(rad(last.lat))*Math.cos(rad(now.lat))*
+        Math.cos(rad(now.lon-last.lon))
+      )*R;
 
-/* ===== GPS INIT (OB ZAGONU!) ===== */
-if('geolocation' in navigator){
-  navigator.geolocation.watchPosition(
-    p=>{
-      const acc=p.coords.accuracy;
-      $('gpss').textContent=`GPS OK (acc ${Math.round(acc)} m)`;
-      if(acc>maxAcc) return;
-
-      const now={lat:p.coords.latitude,lon:p.coords.longitude};
-      if(last){
-        const R=6371000,rad=x=>x*Math.PI/180;
-        const d=Math.acos(
-          Math.sin(rad(last.lat))*Math.sin(rad(now.lat))+
-          Math.cos(rad(last.lat))*Math.cos(rad(now.lat))*
-          Math.cos(rad(now.lon-last.lon))
-        )*R;
-
-        if(measure && d>=minStep){
-          total+=d; partial+=d;
-          $('total').textContent=fmt(total);
-          $('partial').textContent=fmt(partial);
-          checkAlerts();
-        }
+      if(measure && d>=minStep){
+        total+=d;
+        $('total').textContent=fmt(total);
+        checkAlerts();
       }
-      last=now;
-    },
-    e=>{
-      $('gpss').textContent='GPS napaka';
-      log('GPS ERR');
-    },
-    {enableHighAccuracy:true,maximumAge:0,timeout:8000}
-  );
-}else{
-  $('gpss').textContent='GPS ni podprt';
+    }
+    last=now;
+  },()=>{}, {enableHighAccuracy:true});
 }
 
 /* ===== BUTTONS ===== */
-$('startBtn').onclick=()=>{
-  measure=true; partial=0;
-  $('startBtn').classList.add('active');
-  $('stopBtn').classList.remove('active');
-  log('START');
-};
-$('stopBtn').onclick=()=>{
-  measure=false;
-  $('stopBtn').classList.add('active');
-  $('startBtn').classList.remove('active');
-  log('STOP');
-};
+$('startBtn').onclick=()=>{measure=true;$('startBtn').classList.add('active');$('stopBtn').classList.remove('active');};
+$('stopBtn').onclick=()=>{measure=false;$('stopBtn').classList.add('active');$('startBtn').classList.remove('active');};
 
-/* Lead buttons */
+$('tm').onclick=()=>{ total=Math.max(0,total-10); $('total').textContent=fmt(total); updateNext(); };
+$('tp').onclick=()=>{ total+=10; $('total').textContent=fmt(total); updateNext(); };
+
 document.querySelectorAll('.leadBtn').forEach(b=>{
   b.onclick=()=>{
     document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
@@ -300,18 +274,13 @@ document.querySelectorAll('.leadBtn').forEach(b=>{
 
 $('addAlert').onclick=()=>{
   const txt=$('alertTxt').value.trim()||'Opozorilo';
-  wps.push({
-    km:(total+leadM)/1000,
-    txt,
-    lead:leadM,
-    pre:false, alert:false, passed:false
-  });
+  wps.push({km:(total+leadM)/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
   $('alertTxt').value='';
   renderAlerts();
+  updateNext();
   log(`ADD: ${txt} (+${leadM}m)`);
 };
 
-/* Wake lock */
 $('btnWake').onclick=async()=>{
   try{
     if(!wakeLock) wakeLock=await navigator.wakeLock.request('screen');
@@ -319,8 +288,7 @@ $('btnWake').onclick=async()=>{
   }catch{}
 };
 
-renderAlerts();
+renderAlerts(); updateNext();
 </script>
 </body>
 </html>
-``
