@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Final (Original GPS)</title>
+<title>TripM – Final Stable</title>
 
 <style>
 body{
@@ -40,16 +40,22 @@ button,input{
 button{ cursor:pointer; }
 
 .primary{ background:#143247; }
+
 .bigCorr{ font-size:1.6rem; padding:18px 30px; }
 .bigAdd{ font-size:1.4rem; padding:16px 28px; }
 
-.leadBtn.active{
+.leadBtn.active,
+#startBtn.active{
   background:#1d5a2b;
   border-color:#2e7d3d;
 }
+#stopBtn.active{
+  background:#7a2222;
+  border-color:#a23a3a;
+}
 
 .log{
-  max-height:320px;           /* ✅ ~20 vrstic */
+  max-height:320px;
   overflow:auto;
   border:1px dashed #34465e;
   background:#0f1620;
@@ -141,7 +147,7 @@ button{ cursor:pointer; }
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-/* ========== GLOBALS ========== */
+/* ===== GLOBALS (ORIGINAL) ===== */
 let watchId=null,last=null,total=0,measure=false;
 let leadM=200,minStep=0.3,maxAcc=30;
 let wps=[],wakeLock=null;
@@ -152,7 +158,7 @@ const $=id=>document.getElementById(id);
 const fmt=x=>(x/1000).toFixed(3);
 const ts=()=>new Date().toLocaleTimeString();
 
-/* ========== LOG ========== */
+/* ===== LOG ===== */
 function log(msg){
   if(!loggingEnabled) return;
   const box=$('log');
@@ -163,7 +169,7 @@ function log(msg){
   box.scrollTop=box.scrollHeight;
 }
 
-/* ========== HAVERSINE (ORIGINAL) ========== */
+/* ===== HAVERSINE (ORIGINAL) ===== */
 function hav(a,b){
   const R=6371000,toRad=d=>d*Math.PI/180;
   let dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon);
@@ -173,11 +179,12 @@ function hav(a,b){
   return 2*R*Math.asin(Math.sqrt(h));
 }
 
-/* ========== GPS INIT (ORIGINAL) ========== */
+/* ===== GPS INIT (ORIGINAL LOGIC) ===== */
 function gpsInit(){
   navigator.geolocation.getCurrentPosition(
     p=>log(`GPS pre-warm OK (${Math.round(p.coords.accuracy)} m)`),
-    e=>log(`GPS pre-warm ERR`)
+    ()=>log('GPS pre-warm ERR'),
+    {enableHighAccuracy:true,timeout:5000}
   );
 
   watchId=navigator.geolocation.watchPosition(p=>{
@@ -186,26 +193,26 @@ function gpsInit(){
     $('coords').textContent=
       p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6);
 
-    if(acc>maxAcc){
-      $('gpss').textContent='Slab signal';
-      return;
-    }
-    $('gpss').textContent='GPS OK';
-
-    const now={lat:p.coords.latitude,lon:p.coords.longitude};
-    if(last){
-      const d=hav(last,now);
-      if(measure && d>=minStep){
-        total+=d;
-        $('total').textContent=fmt(total);
-        checkAlerts();
+    if(acc<=maxAcc){
+      $('gpss').textContent='Signal OK';
+      const now={lat:p.coords.latitude,lon:p.coords.longitude};
+      if(last){
+        const d=hav(last,now);
+        if(measure && d>=minStep){
+          total+=d;
+          $('total').textContent=fmt(total);
+          checkAlerts();
+        }
       }
+      last=now;
+    }else{
+      $('gpss').textContent='Slab signal';
     }
-    last=now;
-  },()=>log('GPS ERR'),{enableHighAccuracy:true});
+  },()=>log('GPS watch ERR'),
+  {enableHighAccuracy:true,maximumAge:0,timeout:8000});
 }
 
-/* ========== ALERTS ========== */
+/* ===== ALERTS ===== */
 function updateNext(){
   let best=Infinity;
   for(const w of wps){
@@ -235,9 +242,19 @@ function showAlert(t){
   setTimeout(()=>$('alert').style.display='none',6000);
 }
 
-/* ========== BUTTONS ========== */
-$('startBtn').onclick=()=>{measure=true;log('START');};
-$('stopBtn').onclick=()=>{measure=false;log('STOP');};
+/* ===== BUTTONS ===== */
+$('startBtn').onclick=()=>{
+  measure=true;
+  $('startBtn').classList.add('active');
+  $('stopBtn').classList.remove('active');
+  log('START');
+};
+$('stopBtn').onclick=()=>{
+  measure=false;
+  $('stopBtn').classList.add('active');
+  $('startBtn').classList.remove('active');
+  log('STOP');
+};
 
 $('tm').onclick=()=>{total=Math.max(0,total-10);$('total').textContent=fmt(total);updateNext();};
 $('tp').onclick=()=>{total+=10;$('total').textContent=fmt(total);updateNext();};
