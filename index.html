@@ -4,46 +4,86 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TripM – Rally Trip Master</title>
+<title>TripM – Final (Original GPS)</title>
 
 <style>
 body{
-  margin:0;background:#0b0f14;color:#eaf2ff;
-  font-family:system-ui,Arial;user-select:none;
+  margin:0;
+  background:#0b0f14;
+  color:#eaf2ff;
+  font-family:system-ui,Arial;
+  user-select:none;
 }
 .card{
-  background:#121a23;border:1px solid #203043;
-  border-radius:12px;padding:12px;margin:10px;
+  background:#121a23;
+  border:1px solid #203043;
+  border-radius:12px;
+  padding:12px;
+  margin:10px;
 }
-.big{font-size:2.3rem;font-weight:800;font-family:monospace;}
-.bigTotal{font-size:3.5rem}
-.label{color:#a3b8d4;font-size:.9rem}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.big{
+  font-size:2.4rem;
+  font-weight:800;
+  font-family:ui-monospace,monospace;
+}
+.bigTotal{ font-size:3.6rem; }
+
+.label{ color:#a3b8d4; font-size:.9rem; }
+.row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
 button,input{
-  background:#0f1620;color:#eaf2ff;
+  background:#0f1620;
+  color:#eaf2ff;
   border:1px solid #2c3c50;
-  padding:10px 12px;border-radius:10px;
-}
-button{cursor:pointer}
-.primary{background:#143247}
-.bigCorr{font-size:1.5rem;padding:18px 26px}
-button.active{background:#1d5a2b}
-button.warn{background:#5a1d1d}
-button.info{background:#1d3e5a}
-.leadBtn.active{background:#1d5a2b}
-.log{
-  max-height:300px;overflow:auto;
-  border:1px dashed #34465e;
-  background:#0f1620;padding:8px;
+  padding:10px 12px;
   border-radius:10px;
-  font-family:monospace;font-size:.85rem
 }
+button{ cursor:pointer; }
+
+.primary{ background:#143247; }
+.bigCorr{ font-size:1.6rem; padding:18px 30px; }
+
+button.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
+button.warn{
+  background:#5a1d1d;
+  border-color:#7d2e2e;
+}
+button.info{
+  background:#1d3e5a;
+  border-color:#2e5c7d;
+}
+
+.leadBtn.active{
+  background:#1d5a2b;
+  border-color:#2e7d3d;
+}
+
+.log{
+  max-height:320px;
+  overflow:auto;
+  border:1px dashed #34465e;
+  background:#0f1620;
+  padding:8px;
+  border-radius:10px;
+  font-family:ui-monospace,monospace;
+  font-size:.85rem;
+  white-space:pre-wrap;
+}
+
 .alert{
-  position:fixed;bottom:12px;left:50%;
+  position:fixed;
+  bottom:12px;
+  left:50%;
   transform:translateX(-50%);
-  background:#0c1a25;border:2px solid #ffd166;
-  border-radius:14px;padding:14px;display:none;
-  z-index:9999
+  background:#0c1a25;
+  border:2px solid #ffd166;
+  border-radius:14px;
+  padding:12px;
+  display:none;
+  z-index:9999;
 }
 </style>
 </head>
@@ -53,13 +93,16 @@ button.info{background:#1d3e5a}
 <div class="card">
   <div class="label">TOTAL (km)</div>
   <div id="total" class="big bigTotal">0.000</div>
+
   <div class="row">
     <button id="tm" class="bigCorr">−10 m</button>
     <button id="tp" class="bigCorr">+10 m</button>
     <button id="resetTotal" class="warn">⟲ RESET</button>
   </div>
-  <div class="label">GPS status:</div><div id="gpss">Čakam GPS…</div>
+
+  <div class="label">GPS status:</div><div id="gpss">Čakam GPS fix…</div>
   <div class="label">Natančnost:</div><div id="acca">—</div>
+  <div class="label">Koordinate:</div><div id="coords">—</div>
 </div>
 
 <div class="card">
@@ -78,16 +121,20 @@ button.info{background:#1d3e5a}
 <div class="card">
   <div class="label">Dodaj opozorilo (ABSOLUTNA razdalja)</div>
   <div class="row">
-    <input id="alertDist" type="number" min="1" placeholder="Razdalja od starta (m)">
-    <input id="alertTxt" type="text" placeholder="Besedilo">
+    <input id="alertDist" type="number" min="1" placeholder="Razdalja od starta (m)" style="width:160px">
+    <input id="alertTxt" type="text" placeholder="Besedilo" style="flex:1">
   </div>
-  <div class="row" style="margin-top:8px">
+
+  <div class="row" style="margin-top:10px">
     <span class="label">Predopozorilo:</span>
     <button class="leadBtn" data-m="50">50 m</button>
     <button class="leadBtn" data-m="100">100 m</button>
     <button class="leadBtn active" data-m="200">200 m</button>
   </div>
-  <button id="addAlert" class="primary" style="margin-top:8px">➕ DODAJ</button>
+
+  <div class="row" style="margin-top:10px">
+    <button id="addAlert" class="primary">➕ DODAJ</button>
+  </div>
 </div>
 
 <div class="card">
@@ -95,49 +142,119 @@ button.info{background:#1d3e5a}
   <div id="alertList" class="log"></div>
 </div>
 
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <div class="label">Log</div>
+    <label>
+      <input id="logToggle" type="checkbox" checked> Log ON
+    </label>
+  </div>
+  <div id="log" class="log"></div>
+</div>
+
 <div id="alert" class="alert"><span id="amsg"></span></div>
 
 <script>
-let total=0,last=null,measure=false;
-let leadM=200,wps=[],wakeLock=null;
-let audioCtx;
+/* ========== GLOBALS ========== */
+let watchId=null,last=null,total=0,measure=false;
+let leadM=200,minStep=0.3,maxAcc=30;
+let wps=[],wakeLock=null;
+const LOG_MAX=20;
+let loggingEnabled=true;
+let audioCtx=null;
 
 const $=id=>document.getElementById(id);
 const fmt=x=>(x/1000).toFixed(3);
+const ts=()=>new Date().toLocaleTimeString();
 
+/* ========== SOUND + TTS ========== */
+function attentionSoundAndSpeech(txt){
+  try{
+    audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();
+
+    const play=(dur,delay)=>{
+      const o=audioCtx.createOscillator();
+      const g=audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type='square';
+      o.frequency.value=900;
+      g.gain.value=0.25;
+      setTimeout(()=>{
+        o.start();
+        setTimeout(()=>o.stop(),dur);
+      },delay);
+    };
+
+    play(120,0);
+    play(120,200);
+    play(120,400);
+    play(600,700);
+
+    setTimeout(()=>{
+      const u=new SpeechSynthesisUtterance(txt);
+      u.lang='sl-SI';
+      speechSynthesis.speak(u);
+    },1400);
+  }catch{}
+}
+
+/* ========== LOG ========== */
+function log(msg){
+  if(!loggingEnabled) return;
+  const box=$('log');
+  const lines=(box.textContent?box.textContent.split('\n'):[]);
+  lines.push(`[${ts()}] ${msg}`);
+  while(lines.length>LOG_MAX) lines.shift();
+  box.textContent=lines.join('\n');
+  box.scrollTop=box.scrollHeight;
+}
+
+/* ========== HAVERSINE ========== */
 function hav(a,b){
-  const R=6371000,d2r=x=>x*Math.PI/180;
-  const dLat=d2r(b.lat-a.lat),dLon=d2r(b.lon-a.lon);
-  const h=Math.sin(dLat/2)**2+
-          Math.cos(d2r(a.lat))*Math.cos(d2r(b.lat))*
-          Math.sin(dLon/2)**2;
+  const R=6371000,toRad=d=>d*Math.PI/180;
+  let dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon);
+  let h=Math.sin(dLat/2)**2+
+        Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*
+        Math.sin(dLon/2)**2;
   return 2*R*Math.asin(Math.sqrt(h));
 }
 
-function alertSoundSequence(){
-  audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();
-  const play=(d,delay)=>{
-    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-    o.connect(g);g.connect(audioCtx.destination);
-    o.frequency.value=900;g.gain.value=.25;o.type='square';
-    setTimeout(()=>{o.start();setTimeout(()=>o.stop(),d)},delay);
-  };
-  play(120,0);play(120,200);play(120,400);play(600,700);
+/* ========== GPS INIT ========== */
+function gpsInit(){
+  navigator.geolocation.watchPosition(p=>{
+    const acc=p.coords.accuracy;
+    $('acca').textContent=Math.round(acc)+' m';
+    $('coords').textContent=
+      p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6);
+
+    if(acc>maxAcc){
+      $('gpss').textContent='Slab signal';
+      return;
+    }
+    $('gpss').textContent='GPS OK';
+
+    const now={lat:p.coords.latitude,lon:p.coords.longitude};
+    if(last){
+      const d=hav(last,now);
+      if(measure && d>=minStep){
+        total+=d;
+        $('total').textContent=fmt(total);
+        checkAlerts();
+      }
+    }
+    last=now;
+  },()=>log('GPS ERR'),{enableHighAccuracy:true});
 }
 
-function speak(t){
-  if(!speechSynthesis) return;
-  const u=new SpeechSynthesisUtterance(t);u.lang='sl-SI';
-  speechSynthesis.speak(u);
-}
-
-function showAlert(t){
-  $('amsg').textContent=t;
-  $('alert').style.display='block';
-  navigator.vibrate?.([200,100,200,100,400]);
-  alertSoundSequence();
-  setTimeout(()=>speak(t),1400);
-  setTimeout(()=>$('alert').style.display='none',6000);
+/* ========== ALERTS ========== */
+function updateNext(){
+  let best=Infinity;
+  for(const w of wps){
+    if(w.passed) continue;
+    const d=w.km*1000-total;
+    if(d>0 && d<best) best=d;
+  }
+  $('nextD').textContent=best<Infinity?Math.round(best)+' m':'— m';
 }
 
 function checkAlerts(){
@@ -148,78 +265,135 @@ function checkAlerts(){
     if(!w.pre && d<=w.lead && d>0){
       w.pre=true;
       navigator.vibrate?.([200,100,200,100,400]);
-      alertSoundSequence();
-      setTimeout(()=>speak(w.txt),1400);
+      attentionSoundAndSpeech(w.txt);
+      log('PRE '+w.txt);
     }
+
     if(!w.alert && d<=0){
-      w.alert=true;w.passed=true;
+      w.alert=true; w.passed=true;
+      navigator.vibrate?.([200,100,200,100,400]);
       showAlert(w.txt);
+      log('ALERT '+w.txt);
     }
+
     if(d>0) break;
   }
-  updateNext();renderAlerts();
+  updateNext();
+  renderAlerts();
 }
 
-function updateNext(){
-  let best=Infinity;
-  for(const w of wps){
-    if(w.passed) continue;
-    const d=w.km*1000-total;
-    if(d>0&&d<best)best=d;
-  }
-  $('nextD').textContent=best<Infinity?Math.round(best)+' m':'— m';
+function showAlert(t){
+  $('amsg').textContent=t;
+  $('alert').style.display='block';
+  attentionSoundAndSpeech(t);
+  setTimeout(()=>$('alert').style.display='none',6000);
 }
 
 function renderAlerts(){
-  $('alertList').innerHTML=wps
-    .filter(w=>!w.passed)
-    .map(w=>`${Math.round(w.km*1000-total)} m – ${w.txt}`)
-    .join('<br>');
+  const box=$('alertList');
+  box.textContent='';
+  wps.forEach((w,i)=>{
+    if(w.passed) return;
+    const d=Math.round(w.km*1000-total);
+    const row=document.createElement('div');
+    row.innerHTML=
+      `${d} m – ${w.txt}
+       <button data-i="${i}" class="edit">✏️</button>
+       <button data-i="${i}" class="del">🗑</button>`;
+    box.appendChild(row);
+  });
+
+  box.querySelectorAll('.del').forEach(b=>{
+    b.onclick=()=>{
+      wps.splice(b.dataset.i,1);
+      renderAlerts();
+      updateNext();
+    };
+  });
+
+  box.querySelectorAll('.edit').forEach(b=>{
+    b.onclick=()=>{
+      const w=wps[b.dataset.i];
+      const n=prompt('Nov opis',w.txt);
+      if(n!==null){ w.txt=n; renderAlerts(); }
+    };
+  });
 }
 
-navigator.geolocation.watchPosition(p=>{
-  const now={lat:p.coords.latitude,lon:p.coords.longitude};
-  $('acca').textContent=Math.round(p.coords.accuracy)+' m';
-  $('gpss').textContent=p.coords.accuracy<30?'GPS OK':'Slab signal';
-
-  if(last&&measure){
-    const d=hav(last,now);
-    if(d>0.3){
-      total+=d;$('total').textContent=fmt(total);
-      checkAlerts();
-    }
-  }
-  last=now;
-},{},{enableHighAccuracy:true});
-
-$('startBtn').onclick=()=>{$('startBtn').classList.add('active');measure=true};
-$('stopBtn').onclick=()=>{$('startBtn').classList.remove('active');measure=false};
-
-$('tm').onclick=()=>{total=Math.max(0,total-10);$('total').textContent=fmt(total);checkAlerts();}
-$('tp').onclick=()=>{total+=10;$('total').textContent=fmt(total);checkAlerts();}
-
-$('resetTotal').onclick=()=>{
-  if(!confirm('Resetiram TOTAL?')) return;
-  total=0;$('total').textContent=fmt(total);
-  wps.forEach(w=>{w.pre=w.alert=w.passed=false});
-  updateNext();renderAlerts();
+/* ========== CONTROLS ========== */
+$('startBtn').onclick=()=>{
+  measure=true;
+  $('startBtn').classList.add('active');
+  $('stopBtn').classList.remove('warn');
 };
 
-document.querySelectorAll('.leadBtn').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');leadM=+b.dataset.m;
+$('stopBtn').onclick=()=>{
+  measure=false;
+  $('stopBtn').classList.add('warn');
+  $('startBtn').classList.remove('active');
+};
+
+$('tm').onclick=()=>{
+  total=Math.max(0,total-10);
+  $('total').textContent=fmt(total);
+  updateNext(); renderAlerts();
+};
+$('tp').onclick=()=>{
+  total+=10;
+  $('total').textContent=fmt(total);
+  updateNext(); renderAlerts();
+};
+
+$('resetTotal').onclick=()=>{
+  if(!confirm('Resetiram TOTAL števec?')) return;
+  total=0;
+  $('total').textContent=fmt(total);
+  wps.forEach(w=>{
+    w.pre=false; w.alert=false; w.passed=false;
+  });
+  updateNext(); renderAlerts();
+};
+
+document.querySelectorAll('.leadBtn').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.leadBtn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    leadM=Number(b.dataset.m);
+  };
 });
 
 $('addAlert').onclick=()=>{
-  const d=+$('alertDist').value;
-  if(!d) return;
-  wps.push({km:d/1000,txt:$('alertTxt').value||'Opozorilo',
-    lead:leadM,pre:false,alert:false,passed:false});
+  const d=Number($('alertDist').value);
+  if(!d||d<=0) return;
+  const txt=$('alertTxt').value||'Opozorilo';
+  wps.push({km:d/1000,txt,lead:leadM,pre:false,alert:false,passed:false});
   wps.sort((a,b)=>a.km-b.km);
-  $('alertDist').value='';$('alertTxt').value='';
-  renderAlerts();updateNext();
+  $('alertDist').value='';
+  $('alertTxt').value='';
+  updateNext(); renderAlerts();
 };
+
+$('logToggle').onchange=e=>{
+  loggingEnabled=e.target.checked;
+  if(!loggingEnabled) $('log').textContent='';
+};
+
+$('btnWake').onclick=async()=>{
+  try{
+    if(!wakeLock){
+      wakeLock=await navigator.wakeLock.request('screen');
+      $('btnWake').classList.add('info');
+    }else{
+      await wakeLock.release();
+      wakeLock=null;
+      $('btnWake').classList.remove('info');
+    }
+  }catch{}
+};
+
+/* ========== INIT ========== */
+gpsInit();
+updateNext();
 </script>
 </body>
 </html>
-``
